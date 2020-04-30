@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: api-gateway
+    app.kubernetes.io/instance: observatorium-xyz
+    app.kubernetes.io/name: observatorium-api-gateway
+    app.kubernetes.io/part-of: observatorium
+    app.kubernetes.io/version: HEAD-2020-04-16-v0.1.0
+  name: observatorium-xyz-observatorium-api-gateway
+  namespace: observatorium
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api-gateway
+      app.kubernetes.io/instance: observatorium-xyz
+      app.kubernetes.io/name: observatorium-api-gateway
+      app.kubernetes.io/part-of: observatorium
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: api-gateway
+        app.kubernetes.io/instance: observatorium-xyz
+        app.kubernetes.io/name: observatorium-api-gateway
+        app.kubernetes.io/part-of: observatorium
+        app.kubernetes.io/version: HEAD-2020-04-16-v0.1.0
+    spec:
+      containers:
+      - args:
+        - --web.listen=0.0.0.0:8080
+        - --metrics.ui.endpoint=http://observatorium-xyz-observatorium-api-gateway-thanos-query.observatorium.svc.cluster.local:9090
+        - --metrics.read.endpoint=http://observatorium-xyz-cortex-query-frontend.observatorium.svc.cluster.local:9090/api/v1
+        - --metrics.write.endpoint=http://observatorium-xyz-thanos-receive.observatorium.svc.cluster.local:19291/api/v1/receive
+        - --log.level=warn
+        image: quay.io/observatorium/observatorium:HEAD-2020-04-16-v0.1.0
+        livenessProbe:
+          failureThreshold: 8
+          httpGet:
+            path: /-/healthy
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 30
+        name: observatorium-api-gateway
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          failureThreshold: 20
+          httpGet:
+            path: /-/ready
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 5
