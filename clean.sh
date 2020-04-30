@@ -2,5 +2,7 @@
 
 oc delete namespace minio
 oc delete namespace observatorium
+oc delete namespace spoke-example-app
 
-oc delete configmap/cluster-monitoring-config -n openshift-monitoring
+oc delete clusterrole/prometheus-operator
+oc delete clusterrolebinding/prometheus-operator
