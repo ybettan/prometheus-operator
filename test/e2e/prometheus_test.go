@@ -47,6 +47,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+func testMyPromCreateDeleteCluster(t *testing.T) {
+
+	fmt.Println("=============================================================")
+	fmt.Println("       		     Hello, it's me")
+	fmt.Println("=============================================================")
+	time.Sleep(1 * time.Minute)
+}
+
 func testPromCreateDeleteCluster(t *testing.T) {
 	t.Parallel()
 
