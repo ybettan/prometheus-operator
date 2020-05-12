@@ -50,9 +50,32 @@ import (
 func testMyPromCreateDeleteCluster(t *testing.T) {
 
 	fmt.Println("=============================================================")
-	fmt.Println("       		     Hello, it's me")
+	fmt.Println("       		     starting test")
 	fmt.Println("=============================================================")
-	time.Sleep(1 * time.Minute)
+
+	ctx := framework.NewTestCtx(t)
+	defer ctx.Cleanup(t)
+	ns := ctx.CreateNamespace(t, framework.KubeClient)
+	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
+
+	name := "test"
+
+	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
+	prometheusCRD.Namespace = ns
+
+	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(3 * time.Minute)
+
+	if err := framework.DeletePrometheusAndWaitUntilGone(ns, name); err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("=============================================================")
+	fmt.Println("       		     finishing test")
+	fmt.Println("=============================================================")
 }
 
 func testPromCreateDeleteCluster(t *testing.T) {
