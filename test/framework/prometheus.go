@@ -62,6 +62,9 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 					v1.ResourceMemory: resource.MustParse("400Mi"),
 				},
 			},
+			RemoteWrite: []monitoringv1.RemoteWriteSpec{{
+				URL: "https://10.106.91.22",
+			}},
 		},
 	}
 }
