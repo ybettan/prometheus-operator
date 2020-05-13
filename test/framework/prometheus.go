@@ -63,7 +63,10 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 				},
 			},
 			RemoteWrite: []monitoringv1.RemoteWriteSpec{{
-				URL: "https://10.106.91.22",
+				URL: "https://meow.com/",
+				TLSConfig: &monitoringv1.TLSConfig{
+					InsecureSkipVerify: true,
+				},
 			}},
 		},
 	}

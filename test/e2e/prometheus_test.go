@@ -53,25 +53,231 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	fmt.Println("       		     starting test")
 	fmt.Println("=============================================================")
 
+	//ctx := framework.NewTestCtx(t)
+	//defer ctx.Cleanup(t)
+	//ns := ctx.CreateNamespace(t, framework.KubeClient)
+	//ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
+
+	//name := "test"
+
+	//s := framework.MakeBasicServiceMonitor(name)
+	//if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), s, metav1.CreateOptions{}); err != nil {
+	//	t.Fatal("Creating ServiceMonitor failed: ", err)
+	//}
+
+	//prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
+	//prometheusCRD.Namespace = ns
+
+	//if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
+	//	t.Fatal(err)
+	//}
+
+	//time.Sleep(3 * time.Minute)
+
+	//if err := framework.DeletePrometheusAndWaitUntilGone(ns, name); err != nil {
+	//	t.Fatal(err)
+	//}
+
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup(t)
+
 	ns := ctx.CreateNamespace(t, framework.KubeClient)
 	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
-
 	name := "test"
 
+	//
+	// Setup sample app.
+	//
+
+	cert, err := ioutil.ReadFile("../../test/instrumented-sample-app/certs/cert.pem")
+	if err != nil {
+		t.Fatalf("failed to load cert.pem: %v", err)
+	}
+
+	fmt.Println("cert.pem file read")
+
+	key, err := ioutil.ReadFile("../../test/instrumented-sample-app/certs/key.pem")
+	if err != nil {
+		t.Fatalf("failed to load key.pem: %v", err)
+	}
+
+	fmt.Println("key.pem file read")
+
+	tlsCertsSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Data: map[string][]byte{
+			"cert.pem": cert,
+			"key.pem":  key,
+		},
+	}
+
+	if _, err := framework.KubeClient.CoreV1().Secrets(ns).Create(context.TODO(), tlsCertsSecret, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("Secret created")
+
+	simple, err := testFramework.MakeDeployment("../../test/framework/ressources/basic-auth-app-deployment.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	simple.Spec.Template.Spec.Containers[0].Args = []string{"--cert-path=/etc/certs"}
+
+	simple.Spec.Template.Spec.Volumes = []v1.Volume{
+		v1.Volume{
+			Name: "tls-certs",
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: tlsCertsSecret.Name,
+				},
+			},
+		},
+	}
+
+	simple.Spec.Template.Spec.Containers[0].VolumeMounts = []v1.VolumeMount{
+		{
+			Name:      simple.Spec.Template.Spec.Volumes[0].Name,
+			MountPath: "/etc/certs",
+		},
+	}
+
+	if err := testFramework.CreateDeployment(framework.KubeClient, ns, simple); err != nil {
+		t.Fatal("Creating simple basic auth app failed: ", err)
+	}
+
+	fmt.Println("Deployment created (basic-auth-app)")
+
+	svc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"group": name,
+			},
+		},
+		Spec: v1.ServiceSpec{
+			Type: v1.ServiceTypeLoadBalancer,
+			Ports: []v1.ServicePort{
+				v1.ServicePort{
+					Name: "web",
+					Port: 8080,
+				},
+				v1.ServicePort{
+					Name: "mtls",
+					Port: 8081,
+				},
+			},
+			Selector: map[string]string{
+				"group": name,
+			},
+		},
+	}
+
+	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("Service created (basic-auth-app)")
+
+	//
+	// Setup monitoring.
+	//
+
+	sm := framework.MakeBasicServiceMonitor(name)
+	sm.Spec.Endpoints = []monitoringv1.Endpoint{
+		{
+			Port:     "mtls",
+			Interval: "30s",
+			Scheme:   "https",
+			TLSConfig: &monitoringv1.TLSConfig{
+				InsecureSkipVerify: true,
+				CA: monitoringv1.SecretOrConfigMap{
+					Secret: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: tlsCertsSecret.Name,
+						},
+						Key: "cert.pem",
+					},
+				},
+				Cert: monitoringv1.SecretOrConfigMap{
+					Secret: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: tlsCertsSecret.Name,
+						},
+						Key: "cert.pem",
+					},
+				},
+				KeySecret: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: tlsCertsSecret.Name,
+					},
+					Key: "key.pem",
+				},
+			},
+		},
+	}
+
+	if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), sm, metav1.CreateOptions{}); err != nil {
+		t.Fatal("creating ServiceMonitor failed: ", err)
+	}
+
+	fmt.Println("ServiceMonitor created")
+
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-	prometheusCRD.Namespace = ns
 
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(3 * time.Minute)
+	fmt.Println("Prometheus created")
 
-	if err := framework.DeletePrometheusAndWaitUntilGone(ns, name); err != nil {
+	promSVC := framework.MakePrometheusService(prometheusCRD.Name, name, v1.ServiceTypeClusterIP)
+
+	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, promSVC); err != nil {
 		t.Fatal(err)
 	}
+
+	fmt.Println("Service created (prometheus)")
+
+	//
+	// Check for proper scraping.
+	//
+
+	if err := framework.WaitForTargets(ns, promSVC.Name, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("waiting for targets done")
+
+	// TODO: Do a poll instead, should speed up things.
+	time.Sleep(30 * time.Second)
+
+	time.Sleep(5 * time.Minute)
+
+	//response, err := framework.PrometheusSVCGetRequest(
+	//	ns,
+	//	promSVC.Name,
+	//	"/api/v1/query",
+	//	map[string]string{"query": fmt.Sprintf(`up{job="%v",endpoint="%v"}`, name, sm.Spec.Endpoints[0].Port)},
+	//)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+
+	//q := testFramework.PrometheusQueryAPIResponse{}
+	//if err := json.NewDecoder(bytes.NewBuffer(response)).Decode(&q); err != nil {
+	//	t.Fatal(err)
+	//}
+
+	//if q.Status != "success" {
+	//	t.Fatalf("expected query status to be 'success' but got %v", q.Status)
+	//}
+
+	//if q.Data.Result[0].Value[1] != "1" {
+	//	t.Fatalf("expected query result to be '1' but got %v", q.Data.Result[0].Value[1])
+	//}
 
 	fmt.Println("=============================================================")
 	fmt.Println("       		     finishing test")
