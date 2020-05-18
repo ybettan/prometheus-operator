@@ -66,6 +66,8 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 				URL: "https://meow.com/",
 				TLSConfig: &monitoringv1.TLSConfig{
 					InsecureSkipVerify: true,
+					CertFile:           "/etc/certs/client.crt",
+					KeyFile:            "/etc/certs/client.key",
 				},
 			}},
 		},

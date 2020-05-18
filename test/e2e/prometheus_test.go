@@ -61,6 +61,40 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	name := "test"
 
 	//
+	// mount certificate and key files to prometheus pod
+	//
+	cert, err := ioutil.ReadFile("../../client_cert_tmp/client.crt")
+	if err != nil {
+		t.Fatalf("failed to load client.crt: %v", err)
+	}
+
+	fmt.Println("client.crt file read")
+
+	key, err := ioutil.ReadFile("../../client_cert_tmp/client.key")
+	if err != nil {
+		t.Fatalf("failed to load client.key: %v", err)
+	}
+
+	fmt.Println("client.key file read")
+
+	tlsCertsSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Data: map[string][]byte{
+			"client.crt": cert,
+			"client.key": key,
+		},
+	}
+
+	_, err = framework.KubeClient.CoreV1().Secrets(ns).Create(context.TODO(), tlsCertsSecret, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println("Secret created")
+
+	//
 	// Setup sample app.
 	//
 
@@ -127,6 +161,24 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
 
+	prometheusCRD.Spec.Volumes = []v1.Volume{
+		v1.Volume{
+			Name: "tls-certs",
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: tlsCertsSecret.Name,
+				},
+			},
+		},
+	}
+
+	prometheusCRD.Spec.VolumeMounts = []v1.VolumeMount{
+		{
+			Name:      prometheusCRD.Spec.Volumes[0].Name,
+			MountPath: "/etc/certs",
+		},
+	}
+
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
@@ -152,9 +204,9 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	fmt.Println("waiting for targets done")
 
 	// TODO: Do a poll instead, should speed up things.
-	time.Sleep(30 * time.Second)
+	//time.Sleep(30 * time.Second)
 
-	time.Sleep(5 * time.Minute)
+	//time.Sleep(2 * time.Minute)
 
 	fmt.Println("=============================================================")
 	fmt.Println("       		     finishing test")
