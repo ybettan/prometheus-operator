@@ -30,6 +30,7 @@ import (
 
 	v1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/coreos/prometheus-operator/pkg/operator"
+	k8sv1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -71,6 +72,65 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	}
 
 	return res
+}
+
+func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
+	if tls != nil {
+		pathPrefix := path.Join(tlsAssetsDir, namespace)
+		tlsConfig := yaml.MapSlice{
+			{Key: "insecure_skip_verify", Value: tls.InsecureSkipVerify},
+		}
+		if tls.CAFile != "" {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: tls.CAFile})
+		}
+		if tls.CA.Secret != nil {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.Secret.Name + "_" + tls.CA.Secret.Key})
+		}
+		if tls.CA.ConfigMap != nil {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.ConfigMap.Name + "_" + tls.CA.ConfigMap.Key})
+		}
+		if tls.CertFile != "" {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: tls.CertFile})
+		}
+		//FIXME: we need to make sure that the user doesn't supply Cert Secret withou Key Secret.
+		if tls.Cert.Secret != nil {
+			prometheus.Spec.Volumes = []k8sv1.Volume{
+				k8sv1.Volume{
+					Name: "tls-certs",
+					VolumeSource: k8sv1.VolumeSource{
+						Secret: &k8sv1.SecretVolumeSource{
+							SecretName: "test", //FIXME: find the secret name in other way?
+						},
+					},
+				},
+			}
+			prometheus.Spec.VolumeMounts = []k8sv1.VolumeMount{
+				{
+					Name: prometheus.Spec.Volumes[0].Name,
+					//FIXME: setting it to "/etc/prometheus/certs" of to pathPrefix ins't working for some reasone
+					MountPath: "/etc/prometheus",
+				},
+			}
+			//FIXME: uncomment once I see that the cert files are mounted to prometheus pod
+			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "/" + tls.Cert.Secret.Key})
+			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
+		}
+		if tls.Cert.ConfigMap != nil {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.ConfigMap.Name + "_" + tls.Cert.ConfigMap.Key})
+		}
+		if tls.KeyFile != "" {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: tls.KeyFile})
+		}
+		if tls.KeySecret != nil {
+			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
+			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "/" + tls.KeySecret.Key})
+		}
+		if tls.ServerName != "" {
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})
+		}
+		cfg = append(cfg, yaml.MapItem{Key: "tls_config", Value: tlsConfig})
+	}
+	return cfg
 }
 
 func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
@@ -363,7 +423,7 @@ func (cg *configGenerator) generateConfig(
 	})
 
 	if len(p.Spec.RemoteWrite) > 0 && version.Major >= 2 {
-		cfg = append(cfg, cg.generateRemoteWriteConfig(version, p.Spec.RemoteWrite, basicAuthSecrets))
+		cfg = append(cfg, cg.generateRemoteWriteConfig(version, p, p.Spec.RemoteWrite, basicAuthSecrets))
 	}
 
 	if len(p.Spec.RemoteRead) > 0 && version.Major >= 2 {
@@ -1380,7 +1440,7 @@ func (cg *configGenerator) generateRemoteReadConfig(version semver.Version, spec
 	}
 }
 
-func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, specs []v1.RemoteWriteSpec, basicAuthSecrets map[string]BasicAuthCredentials) yaml.MapItem {
+func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, prometheus *v1.Prometheus, specs []v1.RemoteWriteSpec, basicAuthSecrets map[string]BasicAuthCredentials) yaml.MapItem {
 
 	cfgs := []yaml.MapSlice{}
 
@@ -1459,7 +1519,7 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, spe
 
 		// TODO: If we want to support secret refs for remote write tls
 		// config as well, make sure to path the right namespace here.
-		cfg = addTLStoYaml(cfg, "", spec.TLSConfig)
+		cfg = addTLStoYamlYoni(cfg, prometheus, "", spec.TLSConfig)
 
 		if spec.ProxyURL != "" {
 			cfg = append(cfg, yaml.MapItem{Key: "proxy_url", Value: spec.ProxyURL})

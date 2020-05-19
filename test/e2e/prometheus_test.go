@@ -77,6 +77,7 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 
 	fmt.Println("client.key file read")
 
+	//FIXME: use test/framework/secret.go instead?
 	tlsCertsSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -160,24 +161,6 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	fmt.Println("ServiceMonitor created")
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-
-	prometheusCRD.Spec.Volumes = []v1.Volume{
-		v1.Volume{
-			Name: "tls-certs",
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: tlsCertsSecret.Name,
-				},
-			},
-		},
-	}
-
-	prometheusCRD.Spec.VolumeMounts = []v1.VolumeMount{
-		{
-			Name:      prometheusCRD.Spec.Volumes[0].Name,
-			MountPath: "/etc/certs",
-		},
-	}
 
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
