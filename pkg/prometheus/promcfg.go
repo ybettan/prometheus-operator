@@ -83,6 +83,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 		if tls.CAFile != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: tls.CAFile})
 		}
+		//FIXME: CA needs to be updated as well
 		if tls.CA.Secret != nil {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.Secret.Name + "_" + tls.CA.Secret.Key})
 		}
@@ -112,7 +113,8 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 				},
 			}
 			//FIXME: uncomment once I see that the cert files are mounted to prometheus pod
-			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "/" + tls.Cert.Secret.Key})
+			//FIXME: use variable instead of hardcoaded paths
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/client.crt"})
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
 		}
 		if tls.Cert.ConfigMap != nil {
@@ -122,8 +124,9 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: tls.KeyFile})
 		}
 		if tls.KeySecret != nil {
+			//FIXME: use variable instead of hardcoaded paths
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
-			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "/" + tls.KeySecret.Key})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/client.key"})
 		}
 		if tls.ServerName != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})
@@ -1517,6 +1520,7 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 			cfg = append(cfg, yaml.MapItem{Key: "bearer_token_file", Value: spec.BearerTokenFile})
 		}
 
+		//FIXME: I need to change this function
 		// TODO: If we want to support secret refs for remote write tls
 		// config as well, make sure to path the right namespace here.
 		cfg = addTLStoYamlYoni(cfg, prometheus, "", spec.TLSConfig)

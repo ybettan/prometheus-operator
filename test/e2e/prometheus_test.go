@@ -187,9 +187,9 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	fmt.Println("waiting for targets done")
 
 	// TODO: Do a poll instead, should speed up things.
-	//time.Sleep(30 * time.Second)
+	time.Sleep(30 * time.Second)
 
-	//time.Sleep(2 * time.Minute)
+	time.Sleep(2 * time.Minute)
 
 	fmt.Println("=============================================================")
 	fmt.Println("       		     finishing test")
