@@ -74,7 +74,29 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	return res
 }
 
-func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
+func mountVolume(p *v1.Prometheus) {
+
+	p.Spec.Volumes = []k8sv1.Volume{
+		k8sv1.Volume{
+			Name: "tls-certs",
+			VolumeSource: k8sv1.VolumeSource{
+				Secret: &k8sv1.SecretVolumeSource{
+					//FIXME: get the secret name as a parameter?
+					SecretName: "test", //FIXME: find the secret name in other way?
+				},
+			},
+		},
+	}
+	p.Spec.VolumeMounts = []k8sv1.VolumeMount{
+		{
+			Name: p.Spec.Volumes[0].Name,
+			//FIXME: setting it to "/etc/prometheus/certs" of to pathPrefix ins't working for some reasone
+			MountPath: "/etc/prometheus",
+		},
+	}
+}
+
+func addTLStoYamlYoni(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
 	if tls != nil {
 		pathPrefix := path.Join(tlsAssetsDir, namespace)
 		tlsConfig := yaml.MapSlice{
@@ -93,27 +115,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 		if tls.CertFile != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: tls.CertFile})
 		}
-		//FIXME: we need to make sure that the user doesn't supply Cert Secret withou Key Secret.
 		if tls.Cert.Secret != nil {
-			prometheus.Spec.Volumes = []k8sv1.Volume{
-				k8sv1.Volume{
-					Name: "tls-certs",
-					VolumeSource: k8sv1.VolumeSource{
-						Secret: &k8sv1.SecretVolumeSource{
-							//FIXME: get the secret name as a parameter?
-							SecretName: "test", //FIXME: find the secret name in other way?
-						},
-					},
-				},
-			}
-			prometheus.Spec.VolumeMounts = []k8sv1.VolumeMount{
-				{
-					Name: prometheus.Spec.Volumes[0].Name,
-					//FIXME: setting it to "/etc/prometheus/certs" of to pathPrefix ins't working for some reasone
-					MountPath: "/etc/prometheus",
-				},
-			}
-			//FIXME: uncomment once I see that the cert files are mounted to prometheus pod
 			//FIXME: use variable instead of hardcoaded paths
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/cert.pem"})
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
@@ -1521,10 +1523,16 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 			cfg = append(cfg, yaml.MapItem{Key: "bearer_token_file", Value: spec.BearerTokenFile})
 		}
 
+		//FIXME: support it for configMaps as well
+		//FIXME: make sure cert and key must be supply in pairs
+		if spec.TLSConfig.Cert.Secret != nil && spec.TLSConfig.KeySecret != nil {
+			mountVolume(prometheus)
+		}
+
 		//FIXME: I need to change this function
 		// TODO: If we want to support secret refs for remote write tls
 		// config as well, make sure to path the right namespace here.
-		cfg = addTLStoYamlYoni(cfg, prometheus, "", spec.TLSConfig)
+		cfg = addTLStoYamlYoni(cfg, "", spec.TLSConfig)
 
 		if spec.ProxyURL != "" {
 			cfg = append(cfg, yaml.MapItem{Key: "proxy_url", Value: spec.ProxyURL})
