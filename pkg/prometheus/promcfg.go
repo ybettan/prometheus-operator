@@ -100,6 +100,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 					Name: "tls-certs",
 					VolumeSource: k8sv1.VolumeSource{
 						Secret: &k8sv1.SecretVolumeSource{
+							//FIXME: get the secret name as a parameter?
 							SecretName: "test", //FIXME: find the secret name in other way?
 						},
 					},
@@ -114,7 +115,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 			}
 			//FIXME: uncomment once I see that the cert files are mounted to prometheus pod
 			//FIXME: use variable instead of hardcoaded paths
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/client.crt"})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/cert.pem"})
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
 		}
 		if tls.Cert.ConfigMap != nil {
@@ -126,7 +127,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, prometheus *v1.Prometheus, namespace st
 		if tls.KeySecret != nil {
 			//FIXME: use variable instead of hardcoaded paths
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/client.key"})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/key.pem"})
 		}
 		if tls.ServerName != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})

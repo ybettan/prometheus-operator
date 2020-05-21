@@ -159,7 +159,7 @@ func TestAllNS(t *testing.T) {
 func testAllNSPrometheus(t *testing.T) {
 	skipPrometheusTests(t)
 	testFuncs := map[string]func(t *testing.T){
-		"MyPromCreateDeleteCluster": testMyPromCreateDeleteCluster,
+		"PromRemoteWriteWithTLS": testPromRemoteWriteWithTLS,
 		//"PromDiscovery":                          testPromDiscovery,
 		//"PromExposingWithKubernetesAPI":          testPromExposingWithKubernetesAPI,
 		//"PromGetAuthSecret":                      testPromGetAuthSecret,

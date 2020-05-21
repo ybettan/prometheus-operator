@@ -47,7 +47,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-func testMyPromCreateDeleteCluster(t *testing.T) {
+const (
+	PASS = 1
+	FAIL = 0
+)
+
+func testPromRemoteWriteWithTLS(t *testing.T) {
+
+	certsDir := "../../test/e2e/remote_write_certs/"
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", PASS)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", FAIL)
+}
+
+func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFilename string, expectedResult int) {
+	//func testMyPromCreateDeleteCluster(t *testing.T) {
 
 	fmt.Println("=============================================================")
 	fmt.Println("       		     starting test")
@@ -60,22 +74,19 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
 	name := "test"
 
-	//
-	// mount certificate and key files to prometheus pod
-	//
-	cert, err := ioutil.ReadFile("../../client_cert_tmp/client.crt")
+	// apply authorized certificate and key to k8s as a Secret
+
+	cert, err := ioutil.ReadFile(certsDir + certFilename)
 	if err != nil {
-		t.Fatalf("failed to load client.crt: %v", err)
+		t.Fatalf("failed to load %s: %v", certFilename, err)
 	}
+	fmt.Printf("%s file read\n", certFilename)
 
-	fmt.Println("client.crt file read")
-
-	key, err := ioutil.ReadFile("../../client_cert_tmp/client.key")
+	key, err := ioutil.ReadFile(certsDir + keyFilename)
 	if err != nil {
-		t.Fatalf("failed to load client.key: %v", err)
+		t.Fatalf("failed to load %s: %v", keyFilename, err)
 	}
-
-	fmt.Println("client.key file read")
+	fmt.Printf("%s file read\n", keyFilename)
 
 	//FIXME: use test/framework/secret.go instead?
 	tlsCertsSecret := &v1.Secret{
@@ -83,8 +94,9 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 			Name: name,
 		},
 		Data: map[string][]byte{
-			"client.crt": cert,
-			"client.key": key,
+			//FIXME: this map keys should be fixed?
+			"cert.pem": cert,
+			"key.pem":  key,
 		},
 	}
 
@@ -92,12 +104,9 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	fmt.Println("Secret created")
 
-	//
 	// Setup sample app.
-	//
 
 	simple, err := testFramework.MakeDeployment("../../test/framework/ressources/basic-auth-app-deployment.yaml")
 	if err != nil {
@@ -107,7 +116,6 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	if err := testFramework.CreateDeployment(framework.KubeClient, ns, simple); err != nil {
 		t.Fatal("Creating simple basic auth app failed: ", err)
 	}
-
 	fmt.Println("Deployment created (basic-auth-app)")
 
 	svc := &v1.Service{
@@ -138,12 +146,9 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
 		t.Fatal(err)
 	}
-
 	fmt.Println("Service created (basic-auth-app)")
 
-	//
 	// Setup monitoring.
-	//
 
 	sm := framework.MakeBasicServiceMonitor(name)
 	sm.Spec.Endpoints = []monitoringv1.Endpoint{
@@ -157,39 +162,31 @@ func testMyPromCreateDeleteCluster(t *testing.T) {
 	if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), sm, metav1.CreateOptions{}); err != nil {
 		t.Fatal("creating ServiceMonitor failed: ", err)
 	}
-
 	fmt.Println("ServiceMonitor created")
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
-
 	fmt.Println("Prometheus created")
 
 	promSVC := framework.MakePrometheusService(prometheusCRD.Name, name, v1.ServiceTypeClusterIP)
-
 	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, promSVC); err != nil {
 		t.Fatal(err)
 	}
-
 	fmt.Println("Service created (prometheus)")
 
-	//
 	// Check for proper scraping.
-	//
 
 	if err := framework.WaitForTargets(ns, promSVC.Name, 1); err != nil {
 		t.Fatal(err)
 	}
-
 	fmt.Println("waiting for targets done")
 
 	// TODO: Do a poll instead, should speed up things.
 	time.Sleep(30 * time.Second)
 
-	time.Sleep(2 * time.Minute)
+	time.Sleep(1 * time.Minute)
 
 	fmt.Println("=============================================================")
 	fmt.Println("       		     finishing test")
