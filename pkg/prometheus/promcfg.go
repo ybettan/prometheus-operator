@@ -74,15 +74,14 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	return res
 }
 
-func mountVolume(p *v1.Prometheus) {
+func mountVolume(p *v1.Prometheus, secretName, mountPath string) {
 
 	p.Spec.Volumes = []k8sv1.Volume{
 		k8sv1.Volume{
 			Name: "tls-certs",
 			VolumeSource: k8sv1.VolumeSource{
 				Secret: &k8sv1.SecretVolumeSource{
-					//FIXME: get the secret name as a parameter?
-					SecretName: "test", //FIXME: find the secret name in other way?
+					SecretName: secretName,
 				},
 			},
 		},
@@ -91,7 +90,7 @@ func mountVolume(p *v1.Prometheus) {
 		{
 			Name: p.Spec.Volumes[0].Name,
 			//FIXME: setting it to "/etc/prometheus/certs" of to pathPrefix ins't working for some reasone
-			MountPath: "/etc/prometheus",
+			MountPath: mountPath,
 		},
 	}
 }
@@ -1526,7 +1525,7 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 		//FIXME: support it for configMaps as well
 		//FIXME: make sure cert and key must be supply in pairs
 		if spec.TLSConfig.Cert.Secret != nil && spec.TLSConfig.KeySecret != nil {
-			mountVolume(prometheus)
+			mountVolume(prometheus, "test", "/etc/prometheus")
 		}
 
 		//FIXME: I need to change this function

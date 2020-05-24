@@ -62,28 +62,32 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 					v1.ResourceMemory: resource.MustParse("400Mi"),
 				},
 			},
-			RemoteWrite: []monitoringv1.RemoteWriteSpec{{
-				URL: "https://meow.com/",
-				TLSConfig: &monitoringv1.TLSConfig{
-					InsecureSkipVerify: true,
-					Cert: monitoringv1.SecretOrConfigMap{
-						Secret: &v1.SecretKeySelector{
-							LocalObjectReference: v1.LocalObjectReference{
-								Name: "test",
-							},
-							Key: "client.crt",
-						},
-					},
-					KeySecret: &v1.SecretKeySelector{
-						LocalObjectReference: v1.LocalObjectReference{
-							Name: "test",
-						},
-						Key: "client.key",
-					},
-				},
-			}},
 		},
 	}
+}
+
+func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus, url string) {
+	p.Spec.RemoteWrite = []monitoringv1.RemoteWriteSpec{{
+		//URL: "https://meow.com/",
+		URL: url,
+		TLSConfig: &monitoringv1.TLSConfig{
+			InsecureSkipVerify: true,
+			Cert: monitoringv1.SecretOrConfigMap{
+				Secret: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: "test",
+					},
+					Key: "client.crt",
+				},
+			},
+			KeySecret: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: "test",
+				},
+				Key: "client.key",
+			},
+		},
+	}}
 }
 
 func (f *Framework) AddAlertingToPrometheus(p *monitoringv1.Prometheus, ns, name string) {

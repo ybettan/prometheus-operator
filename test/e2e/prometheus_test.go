@@ -60,6 +60,7 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", FAIL)
 }
 
+//FIXME: I need to add the installation of mTLSRoutes to the test
 func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFilename string, expectedResult int) {
 	//func testMyPromCreateDeleteCluster(t *testing.T) {
 
@@ -165,6 +166,7 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	fmt.Println("ServiceMonitor created")
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
+	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.com/")
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
@@ -182,9 +184,6 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 		t.Fatal(err)
 	}
 	fmt.Println("waiting for targets done")
-
-	// TODO: Do a poll instead, should speed up things.
-	time.Sleep(30 * time.Second)
 
 	time.Sleep(1 * time.Minute)
 
