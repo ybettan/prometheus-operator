@@ -73,7 +73,7 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	return res
 }
 
-func addTLStoYamlYoni(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
+func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
 	if tls != nil {
 		pathPrefix := path.Join(tlsAssetsDir, namespace)
 		tlsConfig := yaml.MapSlice{
@@ -107,44 +107,6 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) ya
 			//FIXME: use variable instead of hardcoaded paths
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/secrets/test/key.pem"})
-		}
-		if tls.ServerName != "" {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})
-		}
-		cfg = append(cfg, yaml.MapItem{Key: "tls_config", Value: tlsConfig})
-	}
-	return cfg
-}
-
-func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
-	if tls != nil {
-		pathPrefix := path.Join(tlsAssetsDir, namespace)
-		tlsConfig := yaml.MapSlice{
-			{Key: "insecure_skip_verify", Value: tls.InsecureSkipVerify},
-		}
-		if tls.CAFile != "" {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: tls.CAFile})
-		}
-		if tls.CA.Secret != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.Secret.Name + "_" + tls.CA.Secret.Key})
-		}
-		if tls.CA.ConfigMap != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.ConfigMap.Name + "_" + tls.CA.ConfigMap.Key})
-		}
-		if tls.CertFile != "" {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: tls.CertFile})
-		}
-		if tls.Cert.Secret != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
-		}
-		if tls.Cert.ConfigMap != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.ConfigMap.Name + "_" + tls.Cert.ConfigMap.Key})
-		}
-		if tls.KeyFile != "" {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: tls.KeyFile})
-		}
-		if tls.KeySecret != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
 		}
 		if tls.ServerName != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})
@@ -1509,7 +1471,7 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 		//FIXME: I need to change this function
 		// TODO: If we want to support secret refs for remote write tls
 		// config as well, make sure to path the right namespace here.
-		cfg = addTLStoYamlYoni(cfg, "", spec.TLSConfig)
+		cfg = addTLStoYaml(cfg, "", spec.TLSConfig)
 
 		if spec.ProxyURL != "" {
 			cfg = append(cfg, yaml.MapItem{Key: "proxy_url", Value: spec.ProxyURL})
