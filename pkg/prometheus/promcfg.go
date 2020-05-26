@@ -30,7 +30,6 @@ import (
 
 	v1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/coreos/prometheus-operator/pkg/operator"
-	k8sv1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -74,27 +73,6 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	return res
 }
 
-func mountVolume(p *v1.Prometheus, secretName, mountPath string) {
-
-	p.Spec.Volumes = []k8sv1.Volume{
-		k8sv1.Volume{
-			Name: "tls-certs",
-			VolumeSource: k8sv1.VolumeSource{
-				Secret: &k8sv1.SecretVolumeSource{
-					SecretName: secretName,
-				},
-			},
-		},
-	}
-	p.Spec.VolumeMounts = []k8sv1.VolumeMount{
-		{
-			Name: p.Spec.Volumes[0].Name,
-			//FIXME: setting it to "/etc/prometheus/certs" of to pathPrefix ins't working for some reasone
-			MountPath: mountPath,
-		},
-	}
-}
-
 func addTLStoYamlYoni(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
 	if tls != nil {
 		pathPrefix := path.Join(tlsAssetsDir, namespace)
@@ -116,7 +94,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) ya
 		}
 		if tls.Cert.Secret != nil {
 			//FIXME: use variable instead of hardcoaded paths
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/cert.pem"})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/secrets/test/cert.pem"})
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
 		}
 		if tls.Cert.ConfigMap != nil {
@@ -128,7 +106,7 @@ func addTLStoYamlYoni(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) ya
 		if tls.KeySecret != nil {
 			//FIXME: use variable instead of hardcoaded paths
 			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/key.pem"})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/secrets/test/key.pem"})
 		}
 		if tls.ServerName != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})
@@ -1523,9 +1501,9 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 		}
 
 		//FIXME: support it for configMaps as well
-		//FIXME: make sure cert and key must be supply in pairs
-		if spec.TLSConfig.Cert.Secret != nil && spec.TLSConfig.KeySecret != nil {
-			mountVolume(prometheus, "test", "/etc/prometheus")
+		// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well
+		if spec.TLSConfig.KeySecret != nil {
+			prometheus.Spec.Secrets = append(prometheus.Spec.Secrets, "test")
 		}
 
 		//FIXME: I need to change this function
