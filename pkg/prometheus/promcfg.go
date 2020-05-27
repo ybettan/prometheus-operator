@@ -364,7 +364,7 @@ func (cg *configGenerator) generateConfig(
 	})
 
 	if len(p.Spec.RemoteWrite) > 0 && version.Major >= 2 {
-		cfg = append(cfg, cg.generateRemoteWriteConfig(version, p, p.Spec.RemoteWrite, basicAuthSecrets))
+		cfg = append(cfg, cg.generateRemoteWriteConfig(version, &p.Spec, basicAuthSecrets))
 	}
 
 	if len(p.Spec.RemoteRead) > 0 && version.Major >= 2 {
@@ -1381,11 +1381,11 @@ func (cg *configGenerator) generateRemoteReadConfig(version semver.Version, spec
 	}
 }
 
-func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, prometheus *v1.Prometheus, specs []v1.RemoteWriteSpec, basicAuthSecrets map[string]BasicAuthCredentials) yaml.MapItem {
+func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, promSpec *v1.PrometheusSpec, basicAuthSecrets map[string]BasicAuthCredentials) yaml.MapItem {
 
 	cfgs := []yaml.MapSlice{}
 
-	for i, spec := range specs {
+	for i, spec := range promSpec.RemoteWrite {
 		//defaults
 		if spec.RemoteTimeout == "" {
 			spec.RemoteTimeout = "30s"
@@ -1462,15 +1462,15 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 		// Cert can be a Secret (either the same as KeySecret or a different one), or a ConfigMap.
 		if spec.TLSConfig.KeySecret != nil {
 			keySecretName := spec.TLSConfig.KeySecret.LocalObjectReference.Name
-			prometheus.Spec.Secrets = append(prometheus.Spec.Secrets, keySecretName)
+			promSpec.Secrets = append(promSpec.Secrets, keySecretName)
 			if spec.TLSConfig.Cert.Secret != nil {
 				certSecretName := spec.TLSConfig.Cert.Secret.LocalObjectReference.Name
 				if keySecretName != certSecretName {
-					prometheus.Spec.Secrets = append(prometheus.Spec.Secrets, certSecretName)
+					promSpec.Secrets = append(promSpec.Secrets, certSecretName)
 				}
 			} else {
 				certConfigMapName := spec.TLSConfig.Cert.ConfigMap.LocalObjectReference.Name
-				prometheus.Spec.ConfigMaps = append(prometheus.Spec.ConfigMaps, certConfigMapName)
+				promSpec.ConfigMaps = append(promSpec.ConfigMaps, certConfigMapName)
 			}
 		}
 
