@@ -48,21 +48,28 @@ import (
 )
 
 const (
-	PASS = 1
-	FAIL = 0
+	SECRET    = 3
+	CONFIGMAP = 2
+	PASS      = 1
+	FAIL      = 0
 )
 
 func testPromRemoteWriteWithTLS(t *testing.T) {
 
 	certsDir := "../../test/e2e/remote_write_certs/"
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", PASS)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", FAIL)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", true, SECRET, PASS)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", false, SECRET, PASS)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", false, CONFIGMAP, PASS)
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", true, SECRET, FAIL)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", false, SECRET, FAIL)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", false, CONFIGMAP, FAIL)
 }
 
 //FIXME: I need to add the installation of mTLSRoutes to the test
-func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFilename string, expectedResult int) {
-	//func testMyPromCreateDeleteCluster(t *testing.T) {
+func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFilename string,
+	combineKeyAndCert bool, certType, expectedResult int) {
 
 	fmt.Println("=============================================================")
 	fmt.Println("       		     starting test")
@@ -74,6 +81,7 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	ns := ctx.CreateNamespace(t, framework.KubeClient)
 	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
 	name := "test"
+	fmt.Printf("namespace = %s\n", ns)
 
 	// apply authorized certificate and key to k8s as a Secret
 
@@ -89,23 +97,62 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	}
 	fmt.Printf("%s file read\n", keyFilename)
 
+	secrets := []*v1.Secret{}
+	configMaps := []*v1.ConfigMap{}
+
 	//FIXME: use test/framework/secret.go instead?
-	tlsCertsSecret := &v1.Secret{
+	secret1 := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: "key",
 		},
 		Data: map[string][]byte{
-			//FIXME: this map keys should be fixed?
-			"cert.pem": cert,
-			"key.pem":  key,
+			"key.pem": key,
 		},
 	}
+	secrets = append(secrets, secret1)
 
-	_, err = framework.KubeClient.CoreV1().Secrets(ns).Create(context.TODO(), tlsCertsSecret, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatal(err)
+	if combineKeyAndCert {
+		secret1.ObjectMeta.Name = "key-and-cert"
+		secret1.Data["cert.pem"] = cert
+	} else if certType == SECRET {
+		//FIXME: use test/framework/secret.go instead?
+		secret2 := &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "cert",
+			},
+			Data: map[string][]byte{
+				"cert.pem": cert,
+			},
+		}
+		secrets = append(secrets, secret2)
+	} else { //certType == CONFIGMAP
+		//FIXME: use test/framework/config_map.go instead? if yes, I need to implement it
+		configMap1 := &v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "cert",
+			},
+			Data: map[string]string{
+				"cert.pem": string(cert),
+			},
+		}
+		configMaps = append(configMaps, configMap1)
 	}
-	fmt.Println("Secret created")
+
+	for _, s := range secrets {
+		_, err = framework.KubeClient.CoreV1().Secrets(ns).Create(context.TODO(), s, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Println("Secret created")
+	}
+
+	for _, cm := range configMaps {
+		_, err = framework.KubeClient.CoreV1().ConfigMaps(ns).Create(context.TODO(), cm, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Println("ConfigMap created")
+	}
 
 	// Setup sample app.
 
@@ -166,7 +213,7 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	fmt.Println("ServiceMonitor created")
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.com/")
+	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.com/", certType, combineKeyAndCert)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}

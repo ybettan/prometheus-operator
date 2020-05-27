@@ -93,20 +93,16 @@ func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.M
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: tls.CertFile})
 		}
 		if tls.Cert.Secret != nil {
-			//FIXME: use variable instead of hardcoaded paths
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: "/etc/prometheus/secrets/test/cert.pem"})
-			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.Secret.Name + "_" + tls.Cert.Secret.Key})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: path.Join(secretsDir, tls.Cert.Secret.Name, tls.Cert.Secret.Key)})
 		}
 		if tls.Cert.ConfigMap != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: pathPrefix + "_" + tls.Cert.ConfigMap.Name + "_" + tls.Cert.ConfigMap.Key})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: path.Join(configmapsDir, tls.Cert.ConfigMap.Name, tls.Cert.ConfigMap.Key)})
 		}
 		if tls.KeyFile != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: tls.KeyFile})
 		}
 		if tls.KeySecret != nil {
-			//FIXME: use variable instead of hardcoaded paths
-			//tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: pathPrefix + "_" + tls.KeySecret.Name + "_" + tls.KeySecret.Key})
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: "/etc/prometheus/secrets/test/key.pem"})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "key_file", Value: path.Join(secretsDir, tls.KeySecret.Name, tls.KeySecret.Key)})
 		}
 		if tls.ServerName != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "server_name", Value: tls.ServerName})
@@ -1462,15 +1458,22 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 			cfg = append(cfg, yaml.MapItem{Key: "bearer_token_file", Value: spec.BearerTokenFile})
 		}
 
-		//FIXME: support it for configMaps as well
-		// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well
+		// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well.
+		// Cert can be a Secret (either the same as KeySecret or a different one), or a ConfigMap.
 		if spec.TLSConfig.KeySecret != nil {
-			prometheus.Spec.Secrets = append(prometheus.Spec.Secrets, "test")
+			keySecretName := spec.TLSConfig.KeySecret.LocalObjectReference.Name
+			prometheus.Spec.Secrets = append(prometheus.Spec.Secrets, keySecretName)
+			if spec.TLSConfig.Cert.Secret != nil {
+				certSecretName := spec.TLSConfig.Cert.Secret.LocalObjectReference.Name
+				if keySecretName != certSecretName {
+					prometheus.Spec.Secrets = append(prometheus.Spec.Secrets, certSecretName)
+				}
+			} else {
+				certConfigMapName := spec.TLSConfig.Cert.ConfigMap.LocalObjectReference.Name
+				prometheus.Spec.ConfigMaps = append(prometheus.Spec.ConfigMaps, certConfigMapName)
+			}
 		}
 
-		//FIXME: I need to change this function
-		// TODO: If we want to support secret refs for remote write tls
-		// config as well, make sure to path the right namespace here.
 		cfg = addTLStoYaml(cfg, "", spec.TLSConfig)
 
 		if spec.ProxyURL != "" {

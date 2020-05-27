@@ -36,6 +36,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	SECRET    = 3
+	CONFIGMAP = 2
+)
+
 func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) *monitoringv1.Prometheus {
 	return &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
@@ -66,28 +71,46 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 	}
 }
 
-func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus, url string) {
+func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus,
+	url string, certType int, combineKeyAndCert bool) {
+
 	p.Spec.RemoteWrite = []monitoringv1.RemoteWriteSpec{{
-		//URL: "https://meow.com/",
 		URL: url,
 		TLSConfig: &monitoringv1.TLSConfig{
 			InsecureSkipVerify: true,
-			Cert: monitoringv1.SecretOrConfigMap{
-				Secret: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: "test",
-					},
-					Key: "client.crt",
-				},
-			},
 			KeySecret: &v1.SecretKeySelector{
 				LocalObjectReference: v1.LocalObjectReference{
-					Name: "test",
+					Name: "key",
 				},
-				Key: "client.key",
+				Key: "key.pem",
 			},
+			Cert: monitoringv1.SecretOrConfigMap{},
 		},
 	}}
+
+	if certType == SECRET {
+
+		p.Spec.RemoteWrite[0].TLSConfig.Cert.Secret = &v1.SecretKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "cert",
+			},
+			Key: "cert.pem",
+		}
+
+		if combineKeyAndCert {
+			p.Spec.RemoteWrite[0].TLSConfig.KeySecret.LocalObjectReference.Name = "key-and-cert"
+			p.Spec.RemoteWrite[0].TLSConfig.Cert.Secret.LocalObjectReference.Name = "key-and-cert"
+		}
+
+	} else {
+
+		p.Spec.RemoteWrite[0].TLSConfig.Cert.ConfigMap = &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: "cert",
+			},
+			Key: "cert.pem",
+		}
+	}
 }
 
 func (f *Framework) AddAlertingToPrometheus(p *monitoringv1.Prometheus, ns, name string) {
