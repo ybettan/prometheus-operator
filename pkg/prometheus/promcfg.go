@@ -75,19 +75,17 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 
 func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
 	if tls != nil {
-		pathPrefix := path.Join(tlsAssetsDir, namespace)
 		tlsConfig := yaml.MapSlice{
 			{Key: "insecure_skip_verify", Value: tls.InsecureSkipVerify},
 		}
 		if tls.CAFile != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: tls.CAFile})
 		}
-		//FIXME: CA needs to be updated as well
 		if tls.CA.Secret != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.Secret.Name + "_" + tls.CA.Secret.Key})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: path.Join(secretsDir, tls.CA.Secret.Name, tls.CA.Secret.Key)})
 		}
 		if tls.CA.ConfigMap != nil {
-			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: pathPrefix + "_" + tls.CA.ConfigMap.Name + "_" + tls.CA.ConfigMap.Key})
+			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "ca_file", Value: path.Join(configmapsDir, tls.CA.ConfigMap.Name, tls.CA.ConfigMap.Key)})
 		}
 		if tls.CertFile != "" {
 			tlsConfig = append(tlsConfig, yaml.MapItem{Key: "cert_file", Value: tls.CertFile})
@@ -1458,19 +1456,43 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 			cfg = append(cfg, yaml.MapItem{Key: "bearer_token_file", Value: spec.BearerTokenFile})
 		}
 
-		// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well.
-		// Cert can be a Secret (either the same as KeySecret or a different one), or a ConfigMap.
-		if spec.TLSConfig.KeySecret != nil {
-			keySecretName := spec.TLSConfig.KeySecret.LocalObjectReference.Name
-			promSpec.Secrets = append(promSpec.Secrets, keySecretName)
-			if spec.TLSConfig.Cert.Secret != nil {
-				certSecretName := spec.TLSConfig.Cert.Secret.LocalObjectReference.Name
-				if keySecretName != certSecretName {
-					promSpec.Secrets = append(promSpec.Secrets, certSecretName)
+		if spec.TLSConfig != nil {
+
+			// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well.
+			// Cert can be a Secret (either the same as KeySecret or a different one), or a ConfigMap.
+			var keySecretName, certResourceName, caResourceName, certPrefixedResourceName,
+				caPrefixedResourceName string
+
+			if spec.TLSConfig.KeySecret != nil {
+				keySecretName = spec.TLSConfig.KeySecret.LocalObjectReference.Name
+				promSpec.Secrets = append(promSpec.Secrets, keySecretName)
+				if spec.TLSConfig.Cert.Secret != nil {
+					certResourceName = spec.TLSConfig.Cert.Secret.LocalObjectReference.Name
+					certPrefixedResourceName = "secret-" + certResourceName
+					if keySecretName != certResourceName {
+						promSpec.Secrets = append(promSpec.Secrets, certResourceName)
+					}
+				} else {
+					certResourceName = spec.TLSConfig.Cert.ConfigMap.LocalObjectReference.Name
+					certPrefixedResourceName = "configmap-" + certResourceName
+					promSpec.ConfigMaps = append(promSpec.ConfigMaps, certResourceName)
 				}
-			} else {
-				certConfigMapName := spec.TLSConfig.Cert.ConfigMap.LocalObjectReference.Name
-				promSpec.ConfigMaps = append(promSpec.ConfigMaps, certConfigMapName)
+			}
+
+			if (spec.TLSConfig.CA != v1.SecretOrConfigMap{}) {
+				if spec.TLSConfig.CA.Secret != nil {
+					caResourceName = spec.TLSConfig.CA.Secret.LocalObjectReference.Name
+					caPrefixedResourceName = "secret-" + caResourceName
+					if caResourceName != keySecretName && caPrefixedResourceName != certPrefixedResourceName {
+						promSpec.Secrets = append(promSpec.Secrets, caResourceName)
+					}
+				} else {
+					caResourceName = spec.TLSConfig.CA.ConfigMap.LocalObjectReference.Name
+					caPrefixedResourceName = "configmap-" + caResourceName
+					if caPrefixedResourceName != certPrefixedResourceName {
+						promSpec.ConfigMaps = append(promSpec.ConfigMaps, caResourceName)
+					}
+				}
 			}
 		}
 

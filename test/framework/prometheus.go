@@ -72,45 +72,64 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 }
 
 func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus,
-	url string, certType int, combineKeyAndCert bool) {
+	url, keySecretName, certResourceName, caResourceName string, certType, caType int) {
 
 	p.Spec.RemoteWrite = []monitoringv1.RemoteWriteSpec{{
 		URL: url,
-		TLSConfig: &monitoringv1.TLSConfig{
-			InsecureSkipVerify: true,
-			KeySecret: &v1.SecretKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: "key",
-				},
-				Key: "key.pem",
-			},
-			Cert: monitoringv1.SecretOrConfigMap{},
-		},
 	}}
 
-	if certType == SECRET {
+	if (keySecretName != "" && certResourceName != "") || caResourceName != "" {
 
-		p.Spec.RemoteWrite[0].TLSConfig.Cert.Secret = &v1.SecretKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "cert",
-			},
-			Key: "cert.pem",
+		p.Spec.RemoteWrite[0].TLSConfig = &monitoringv1.TLSConfig{}
+
+		if keySecretName != "" && certResourceName != "" {
+			p.Spec.RemoteWrite[0].TLSConfig.KeySecret = &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: keySecretName,
+				},
+				Key: "key.pem",
+			}
+			p.Spec.RemoteWrite[0].TLSConfig.Cert = monitoringv1.SecretOrConfigMap{}
+
+			if certType == SECRET {
+				p.Spec.RemoteWrite[0].TLSConfig.Cert.Secret = &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: certResourceName,
+					},
+					Key: "cert.pem",
+				}
+			} else { //certType == CONFIGMAP
+				p.Spec.RemoteWrite[0].TLSConfig.Cert.ConfigMap = &v1.ConfigMapKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: certResourceName,
+					},
+					Key: "cert.pem",
+				}
+			}
 		}
 
-		if combineKeyAndCert {
-			p.Spec.RemoteWrite[0].TLSConfig.KeySecret.LocalObjectReference.Name = "key-and-cert"
-			p.Spec.RemoteWrite[0].TLSConfig.Cert.Secret.LocalObjectReference.Name = "key-and-cert"
-		}
-
-	} else {
-
-		p.Spec.RemoteWrite[0].TLSConfig.Cert.ConfigMap = &v1.ConfigMapKeySelector{
-			LocalObjectReference: v1.LocalObjectReference{
-				Name: "cert",
-			},
-			Key: "cert.pem",
+		if caResourceName != "" {
+			p.Spec.RemoteWrite[0].TLSConfig.CA = monitoringv1.SecretOrConfigMap{}
+			if caType == SECRET {
+				p.Spec.RemoteWrite[0].TLSConfig.CA.Secret = &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: caResourceName,
+					},
+					Key: "ca.pem",
+				}
+			} else { //caType == CONFIGMAP
+				p.Spec.RemoteWrite[0].TLSConfig.CA.ConfigMap = &v1.ConfigMapKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: caResourceName,
+					},
+					Key: "ca.pem",
+				}
+			}
+		} else {
+			p.Spec.RemoteWrite[0].TLSConfig.InsecureSkipVerify = true
 		}
 	}
+
 }
 
 func (f *Framework) AddAlertingToPrometheus(p *monitoringv1.Prometheus, ns, name string) {

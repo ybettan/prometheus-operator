@@ -50,111 +50,140 @@ import (
 const (
 	SECRET    = 3
 	CONFIGMAP = 2
-	PASS      = 1
-	FAIL      = 0
 )
 
-func testPromRemoteWriteWithTLS(t *testing.T) {
+//FIXME: use test/framework/secret.go instead?
+//FIXME: use test/framework/config_map.go instead? if yes, I need to implement it
+func createK8sResources(t *testing.T, ns, certsDir, keyFilename, certFilename,
+	caFilename, keySecretName, certResourceName, caResourceName string,
+	certResourceType, caResourceType int) {
 
-	certsDir := "../../test/e2e/remote_write_certs/"
+	var key, cert, ca []byte
+	var err error
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", true, SECRET, PASS)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", false, SECRET, PASS)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_cert.pem", "authorized_key.pem", false, CONFIGMAP, PASS)
-
-	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", true, SECRET, FAIL)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", false, SECRET, FAIL)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_cert.pem", "unauthorized_key.pem", false, CONFIGMAP, FAIL)
-}
-
-//FIXME: I need to add the installation of mTLSRoutes to the test
-func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFilename string,
-	combineKeyAndCert bool, certType, expectedResult int) {
-
-	fmt.Println("=============================================================")
-	fmt.Println("       		     starting test")
-	fmt.Println("=============================================================")
-
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup(t)
-
-	ns := ctx.CreateNamespace(t, framework.KubeClient)
-	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
-	name := "test"
-	fmt.Printf("namespace = %s\n", ns)
-
-	// apply authorized certificate and key to k8s as a Secret
-
-	cert, err := ioutil.ReadFile(certsDir + certFilename)
-	if err != nil {
-		t.Fatalf("failed to load %s: %v", certFilename, err)
+	if keyFilename != "" {
+		key, err = ioutil.ReadFile(certsDir + keyFilename)
+		if err != nil {
+			t.Fatalf("failed to load %s: %v", keyFilename, err)
+		}
 	}
-	fmt.Printf("%s file read\n", certFilename)
 
-	key, err := ioutil.ReadFile(certsDir + keyFilename)
-	if err != nil {
-		t.Fatalf("failed to load %s: %v", keyFilename, err)
+	if certResourceName != "" {
+		cert, err = ioutil.ReadFile(certsDir + certFilename)
+		if err != nil {
+			t.Fatalf("failed to load %s: %v", certFilename, err)
+		}
 	}
-	fmt.Printf("%s file read\n", keyFilename)
 
+	if caResourceName != "" {
+		ca, err = ioutil.ReadFile(certsDir + caFilename)
+		if err != nil {
+			t.Fatalf("failed to load %s: %v", caFilename, err)
+		}
+	}
+
+	var s *v1.Secret
+	var cm *v1.ConfigMap
 	secrets := []*v1.Secret{}
 	configMaps := []*v1.ConfigMap{}
 
-	//FIXME: use test/framework/secret.go instead?
-	secret1 := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "key",
-		},
-		Data: map[string][]byte{
-			"key.pem": key,
-		},
-	}
-	secrets = append(secrets, secret1)
-
-	if combineKeyAndCert {
-		secret1.ObjectMeta.Name = "key-and-cert"
-		secret1.Data["cert.pem"] = cert
-	} else if certType == SECRET {
-		//FIXME: use test/framework/secret.go instead?
-		secret2 := &v1.Secret{
+	if keyFilename != "" && certResourceName != "" {
+		s = &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "cert",
+				Name:      keySecretName,
+				Namespace: ns,
 			},
 			Data: map[string][]byte{
-				"cert.pem": cert,
+				"key.pem": key,
 			},
 		}
-		secrets = append(secrets, secret2)
-	} else { //certType == CONFIGMAP
-		//FIXME: use test/framework/config_map.go instead? if yes, I need to implement it
-		configMap1 := &v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "cert",
-			},
-			Data: map[string]string{
-				"cert.pem": string(cert),
-			},
+		secrets = append(secrets, s)
+
+		if certResourceType == SECRET {
+			if certResourceName == keySecretName {
+				s.Data["cert.pem"] = cert
+			} else {
+				s = &v1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      certResourceName,
+						Namespace: ns,
+					},
+					Data: map[string][]byte{
+						"cert.pem": cert,
+					},
+				}
+				secrets = append(secrets, s)
+			}
+		} else if certResourceType == CONFIGMAP {
+			cm = &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certResourceName,
+					Namespace: ns,
+				},
+				Data: map[string]string{
+					"cert.pem": string(cert),
+				},
+			}
+			configMaps = append(configMaps, cm)
+		} else {
+			t.Fatal("cert must be a Secret or a ConfigMap")
 		}
-		configMaps = append(configMaps, configMap1)
 	}
 
-	for _, s := range secrets {
-		_, err = framework.KubeClient.CoreV1().Secrets(ns).Create(context.TODO(), s, metav1.CreateOptions{})
+	if caResourceName != "" {
+		if caResourceType == SECRET {
+			if caResourceName == keySecretName {
+				secrets[0].Data["ca.pem"] = ca
+			} else if caResourceName == certResourceName {
+				s.Data["ca.pem"] = ca
+			} else {
+				s = &v1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      caResourceName,
+						Namespace: ns,
+					},
+					Data: map[string][]byte{
+						"ca.pem": ca,
+					},
+				}
+				secrets = append(secrets, s)
+			}
+		} else if caResourceType == CONFIGMAP {
+			if caResourceName == certResourceName {
+				cm.Data["ca.pem"] = string(ca)
+			} else {
+				cm = &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      caResourceName,
+						Namespace: ns,
+					},
+					Data: map[string]string{
+						"ca.pem": string(ca),
+					},
+				}
+				configMaps = append(configMaps, cm)
+			}
+		} else {
+			t.Fatal("cert must be a Secret or a ConfigMap")
+		}
+	}
+
+	for _, s = range secrets {
+		_, err := framework.KubeClient.CoreV1().Secrets(s.ObjectMeta.Namespace).Create(context.TODO(), s, metav1.CreateOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		fmt.Println("Secret created")
 	}
 
-	for _, cm := range configMaps {
-		_, err = framework.KubeClient.CoreV1().ConfigMaps(ns).Create(context.TODO(), cm, metav1.CreateOptions{})
+	for _, cm = range configMaps {
+		_, err := framework.KubeClient.CoreV1().ConfigMaps(ns).Create(context.TODO(), cm, metav1.CreateOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		fmt.Println("ConfigMap created")
 	}
+}
 
-	// Setup sample app.
+func createK8sSampleApp(t *testing.T, name, ns string) {
 
 	simple, err := testFramework.MakeDeployment("../../test/framework/ressources/basic-auth-app-deployment.yaml")
 	if err != nil {
@@ -164,7 +193,6 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	if err := testFramework.CreateDeployment(framework.KubeClient, ns, simple); err != nil {
 		t.Fatal("Creating simple basic auth app failed: ", err)
 	}
-	fmt.Println("Deployment created (basic-auth-app)")
 
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -194,9 +222,10 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("Service created (basic-auth-app)")
+}
 
-	// Setup monitoring.
+func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceName, caResourceName string,
+	certResourceType, caResourceType int) *monitoringv1.Prometheus {
 
 	sm := framework.MakeBasicServiceMonitor(name)
 	sm.Spec.Endpoints = []monitoringv1.Endpoint{
@@ -210,33 +239,108 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, certFilename, keyFile
 	if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), sm, metav1.CreateOptions{}); err != nil {
 		t.Fatal("creating ServiceMonitor failed: ", err)
 	}
-	fmt.Println("ServiceMonitor created")
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.com/", certType, combineKeyAndCert)
+	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.com/", keySecretName,
+		certResourceName, caResourceName, certResourceType, caResourceType)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("Prometheus created")
 
 	promSVC := framework.MakePrometheusService(prometheusCRD.Name, name, v1.ServiceTypeClusterIP)
 	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, promSVC); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("Service created (prometheus)")
 
 	// Check for proper scraping.
 
 	if err := framework.WaitForTargets(ns, promSVC.Name, 1); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("waiting for targets done")
 
+	return prometheusCRD
+}
+
+func testPromRemoteWriteWithTLS(t *testing.T) {
+
+	certsDir := "../../test/e2e/remote_write_certs/"
+
+	// working configurations
+
+	expectedInLogs := "msg=\"Skipping resharding, last successful send was beyond threshold\" lastSendTimestamp="
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-cert", "key-cert", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert-ca", "cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-ca", "cert", "key-ca", SECRET, SECRET, expectedInLogs, false)
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert-ca", "cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-cert", "key-cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-ca", "cert", "key-ca", CONFIGMAP, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", CONFIGMAP, SECRET, expectedInLogs, false)
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "", "key-cert", "key-cert", "", SECRET, SECRET, expectedInLogs, false)
+
+	// non working configurations - we will check it only for one configuration for simplicity - only one Secret
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "unauthorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_key.pem", "unauthorized_cert.pem", "unauthorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "", "", "", "", SECRET, SECRET, expectedInLogs, true)
+
+	expectedInLogs = "err=\"server returned HTTP status 400 Bad Request: <html>\""
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_key.pem", "unauthorized_cert.pem", "authorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "authorized_ca.pem", "", "", "ca", SECRET, SECRET, expectedInLogs, false)
+
+}
+
+//FIXME: I need to add the installation of mTLSRoutes to the test
+func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, keyFilename, certFilename,
+	caFilename, keySecretName, certResourceName, caResourceName string,
+	certResourceType, caResourceType int, expectedInLogs string, revertLogMatch bool) {
+
+	ctx := framework.NewTestCtx(t)
+	defer ctx.Cleanup(t)
+
+	ns := ctx.CreateNamespace(t, framework.KubeClient)
+	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
+	name := "test"
+
+	// apply authorized certificate and key to k8s as a Secret
+
+	createK8sResources(t, ns, certsDir, keyFilename, certFilename, caFilename, keySecretName,
+		certResourceName, caResourceName, certResourceType, caResourceType)
+
+	// Setup sample app.
+
+	//FIXME: shoudl I create the app once for all the tests?
+	createK8sSampleApp(t, name, ns)
+
+	// Setup monitoring.
+
+	prometheusCRD := createK8sAppMonitoring(t, name, ns, keySecretName, certResourceName,
+		caResourceName, certResourceType, caResourceType)
+
+	//FIXME: make it wait by poll, there are some examples in other tests
 	time.Sleep(1 * time.Minute)
 
-	fmt.Println("=============================================================")
-	fmt.Println("       		     finishing test")
-	fmt.Println("=============================================================")
+	logs, err := testFramework.GetLogs(framework.KubeClient, ns, "prometheus-"+prometheusCRD.Name+"-0", "prometheus")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !revertLogMatch && !strings.Contains(logs, expectedInLogs) {
+		t.Fatalf("test with (%s, %s, %s) faild\nlogs should containe '%s' but it doesn't",
+			keyFilename, certFilename, caFilename, expectedInLogs)
+	} else if revertLogMatch && strings.Contains(logs, expectedInLogs) {
+		t.Fatalf("test with (%s, %s, %s) faild\nlogs shouldn't containe '%s' but it does",
+			keyFilename, certFilename, caFilename, expectedInLogs)
+	}
 }
 
 func testPromCreateDeleteCluster(t *testing.T) {

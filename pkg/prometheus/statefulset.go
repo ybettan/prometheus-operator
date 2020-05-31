@@ -40,7 +40,6 @@ const (
 	storageDir                      = "/prometheus"
 	confDir                         = "/etc/prometheus/config"
 	confOutDir                      = "/etc/prometheus/config_out"
-	tlsAssetsDir                    = "/etc/prometheus/certs"
 	rulesDir                        = "/etc/prometheus/rules"
 	secretsDir                      = "/etc/prometheus/secrets/"
 	configmapsDir                   = "/etc/prometheus/configmaps/"
@@ -510,11 +509,6 @@ func makeStatefulSetSpec(p monitoringv1.Prometheus, c *Config, ruleConfigMapName
 			Name:      "config-out",
 			ReadOnly:  true,
 			MountPath: confOutDir,
-		},
-		{
-			Name:      "tls-assets",
-			ReadOnly:  true,
-			MountPath: tlsAssetsDir,
 		},
 		{
 			Name:      volName,
