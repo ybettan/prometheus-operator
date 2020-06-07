@@ -269,33 +269,33 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 
 	expectedInLogs := "msg=\"Skipping resharding, last successful send was beyond threshold\" lastSendTimestamp="
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-cert", "key-cert", "ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert-ca", "cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-ca", "cert", "key-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert-ca", "cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-ca", "cert", "key-ca", SECRET, SECRET, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert-ca", "cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert-ca", "cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-cert", "key-cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key-ca", "cert", "key-ca", CONFIGMAP, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "authorized_ca.pem", "key", "cert", "ca", CONFIGMAP, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-ca", "cert", "key-ca", CONFIGMAP, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, SECRET, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "", "key-cert", "key-cert", "", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "", "key-cert", "key-cert", "", SECRET, SECRET, expectedInLogs, false)
 
 	// non working configurations - we will check it only for one configuration for simplicity - only one Secret
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "authorized_key.pem", "authorized_cert.pem", "unauthorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_key.pem", "unauthorized_cert.pem", "unauthorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
 	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "", "", "", "", SECRET, SECRET, expectedInLogs, true)
 
 	expectedInLogs = "err=\"server returned HTTP status 400 Bad Request: <html>\""
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "unauthorized_key.pem", "unauthorized_cert.pem", "authorized_ca.pem", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "authorized_ca.pem", "", "", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "ca.crt", "", "", "ca", SECRET, SECRET, expectedInLogs, false)
 
 }
 

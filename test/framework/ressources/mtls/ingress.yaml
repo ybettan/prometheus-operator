@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
+    nginx.ingress.kubernetes.io/auth-tls-secret: "mtls-routes/my-certs"
+  name: meow-ingress
+  namespace: mtls-routes
+spec:
+  rules:
+  - host: meow.com
+    http:
+      paths:
+      - backend:
+          serviceName: meow-svc
+          servicePort: 80
+        path: /
+  tls:
+  - hosts:
+    - meow.com
+    secretName: my-certs
