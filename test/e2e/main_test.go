@@ -159,54 +159,40 @@ func TestAllNS(t *testing.T) {
 func testAllNSPrometheus(t *testing.T) {
 	skipPrometheusTests(t)
 	testFuncs := map[string]func(t *testing.T){
-		"PromRemoteWriteWithTLS": testPromRemoteWriteWithTLS,
+		//"PromCreateDeleteCluster":                testPromCreateDeleteCluster,
+		//"PromScaleUpDownCluster":                 testPromScaleUpDownCluster,
+		//"PromNoServiceMonitorSelector":           testPromNoServiceMonitorSelector,
+		//"PromVersionMigration":                   testPromVersionMigration,
+		//"PromResourceUpdate":                     testPromResourceUpdate,
+		//"PromStorageLabelsAnnotations":           testPromStorageLabelsAnnotations,
+		//"PromStorageUpdate":                      testPromStorageUpdate,
+		//"PromReloadConfig":                       testPromReloadConfig,
+		//"PromAdditionalScrapeConfig":             testPromAdditionalScrapeConfig,
+		//"PromAdditionalAlertManagerConfig":       testPromAdditionalAlertManagerConfig,
+		//"PromReloadRules":                        testPromReloadRules,
+		//"PromMultiplePrometheusRulesSameNS":      testPromMultiplePrometheusRulesSameNS,
+		//"PromMultiplePrometheusRulesDifferentNS": testPromMultiplePrometheusRulesDifferentNS,
+		//"PromRulesExceedingConfigMapLimit":       testPromRulesExceedingConfigMapLimit,
+		//"PromRulesMustBeAnnotated":               testPromRulesMustBeAnnotated,
+		//"PromtestInvalidRulesAreRejected":        testInvalidRulesAreRejected,
+		//"PromOnlyUpdatedOnRelevantChanges":       testPromOnlyUpdatedOnRelevantChanges,
+		//"PromWhenDeleteCRDCleanUpViaOwnerRef":    testPromWhenDeleteCRDCleanUpViaOwnerRef,
 		//"PromDiscovery":                          testPromDiscovery,
+		//"PromAlertmanagerDiscovery":              testPromAlertmanagerDiscovery,
 		//"PromExposingWithKubernetesAPI":          testPromExposingWithKubernetesAPI,
+		//"PromDiscoverTargetPort":                 testPromDiscoverTargetPort,
+		//"PromOpMatchPromAndServMonInDiffNSs":     testPromOpMatchPromAndServMonInDiffNSs,
 		//"PromGetAuthSecret":                      testPromGetAuthSecret,
+		//"PromArbitraryFSAcc":                     testPromArbitraryFSAcc,
 		//"PromTLSConfigViaSecret":                 testPromTLSConfigViaSecret,
+		"PromRemoteWriteWithTLS": testPromRemoteWriteWithTLS,
+		//"Thanos":                                 testThanos,
 	}
 
 	for name, f := range testFuncs {
 		t.Run(name, f)
 	}
 }
-
-//func testAllNSPrometheus(t *testing.T) {
-//	skipPrometheusTests(t)
-//	testFuncs := map[string]func(t *testing.T){
-//		"PromCreateDeleteCluster":                testPromCreateDeleteCluster,
-//		"PromScaleUpDownCluster":                 testPromScaleUpDownCluster,
-//		"PromNoServiceMonitorSelector":           testPromNoServiceMonitorSelector,
-//		"PromVersionMigration":                   testPromVersionMigration,
-//		"PromResourceUpdate":                     testPromResourceUpdate,
-//		"PromStorageLabelsAnnotations":           testPromStorageLabelsAnnotations,
-//		"PromStorageUpdate":                      testPromStorageUpdate,
-//		"PromReloadConfig":                       testPromReloadConfig,
-//		"PromAdditionalScrapeConfig":             testPromAdditionalScrapeConfig,
-//		"PromAdditionalAlertManagerConfig":       testPromAdditionalAlertManagerConfig,
-//		"PromReloadRules":                        testPromReloadRules,
-//		"PromMultiplePrometheusRulesSameNS":      testPromMultiplePrometheusRulesSameNS,
-//		"PromMultiplePrometheusRulesDifferentNS": testPromMultiplePrometheusRulesDifferentNS,
-//		"PromRulesExceedingConfigMapLimit":       testPromRulesExceedingConfigMapLimit,
-//		"PromRulesMustBeAnnotated":               testPromRulesMustBeAnnotated,
-//		"PromtestInvalidRulesAreRejected":        testInvalidRulesAreRejected,
-//		"PromOnlyUpdatedOnRelevantChanges":       testPromOnlyUpdatedOnRelevantChanges,
-//		"PromWhenDeleteCRDCleanUpViaOwnerRef":    testPromWhenDeleteCRDCleanUpViaOwnerRef,
-//		"PromDiscovery":                          testPromDiscovery,
-//		"PromAlertmanagerDiscovery":              testPromAlertmanagerDiscovery,
-//		"PromExposingWithKubernetesAPI":          testPromExposingWithKubernetesAPI,
-//		"PromDiscoverTargetPort":                 testPromDiscoverTargetPort,
-//		"PromOpMatchPromAndServMonInDiffNSs":     testPromOpMatchPromAndServMonInDiffNSs,
-//		"PromGetAuthSecret":                      testPromGetAuthSecret,
-//		"PromArbitraryFSAcc":                     testPromArbitraryFSAcc,
-//		"PromTLSConfigViaSecret":                 testPromTLSConfigViaSecret,
-//		"Thanos":                                 testThanos,
-//	}
-//
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
 
 //func testAllNSThanosRuler(t *testing.T) {
 //	skipThanosRulerTests(t)
