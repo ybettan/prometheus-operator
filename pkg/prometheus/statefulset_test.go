@@ -207,14 +207,6 @@ func TestStatefulSetVolumeInitial(t *testing.T) {
 									SubPath:   "",
 								},
 								{
-									Name:             "tls-assets",
-									ReadOnly:         true,
-									MountPath:        "/etc/prometheus/certs",
-									SubPath:          "",
-									MountPropagation: nil,
-									SubPathExpr:      "",
-								},
-								{
 									Name:      "prometheus-volume-init-test-db",
 									ReadOnly:  false,
 									MountPath: "/prometheus",
@@ -241,14 +233,6 @@ func TestStatefulSetVolumeInitial(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								Secret: &v1.SecretVolumeSource{
 									SecretName: configSecretName("volume-init-test"),
-								},
-							},
-						},
-						{
-							Name: "tls-assets",
-							VolumeSource: v1.VolumeSource{
-								Secret: &v1.SecretVolumeSource{
-									SecretName: tlsAssetsSecretName("volume-init-test"),
 								},
 							},
 						},
