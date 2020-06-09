@@ -16,22 +16,24 @@ package framework
 
 import (
 	"context"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-func CreateSecretWithCert(kubeClient kubernetes.Interface, certBytes, keyBytes []byte, ns string, name string) error {
+func CreateSecretWithCert(kubeClient kubernetes.Interface, certBytes, keyBytes, caBytes []byte, ns string, name string) error {
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Type:       corev1.SecretType("Opaque"),
 		Data:       map[string][]byte{"tls.crt": certBytes, "tls.key": keyBytes}}
 
-	_, err := kubeClient.CoreV1().Secrets(ns).Create(context.TODO(), secret, metav1.CreateOptions{})
-	if err != nil {
-		return err
+	if caBytes != nil {
+		secret.Data["ca.crt"] = caBytes
 	}
+
+	_, err := kubeClient.CoreV1().Secrets(ns).Create(context.TODO(), secret, metav1.CreateOptions{})
 
 	return err
 }
