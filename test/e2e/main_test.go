@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	operatorFramework "github.com/coreos/prometheus-operator/test/framework"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 )
@@ -102,9 +103,9 @@ func TestAllNS(t *testing.T) {
 	// testAllNS are parallel, the defered ctx.Cleanup above would be run before
 	// all tests finished. Wrapping it in testAllNSPrometheus and testAllNSAlertmanager
 	// fixes this.
-	//t.Run("x", testAllNSAlertmanager)
+	t.Run("x", testAllNSAlertmanager)
 	t.Run("y", testAllNSPrometheus)
-	//t.Run("z", testAllNSThanosRuler)
+	t.Run("z", testAllNSThanosRuler)
 
 	// Check if Prometheus Operator ever restarted.
 	opts := metav1.ListOptions{LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
@@ -135,58 +136,19 @@ func TestAllNS(t *testing.T) {
 	}
 }
 
-//
-//func testAllNSAlertmanager(t *testing.T) {
-//	skipAlertmanagerTests(t)
-//	testFuncs := map[string]func(t *testing.T){
-//		"AMCreateDeleteCluster":           testAMCreateDeleteCluster,
-//		"AMScaling":                       testAMScaling,
-//		"AMVersionMigration":              testAMVersionMigration,
-//		"AMStorageUpdate":                 testAMStorageUpdate,
-//		"AMExposingWithKubernetesAPI":     testAMExposingWithKubernetesAPI,
-//		"AMClusterInitialization":         testAMClusterInitialization,
-//		"AMClusterAfterRollingUpdate":     testAMClusterAfterRollingUpdate,
-//		"AMClusterGossipSilences":         testAMClusterGossipSilences,
-//		"AMReloadConfig":                  testAMReloadConfig,
-//		"AMZeroDowntimeRollingDeployment": testAMZeroDowntimeRollingDeployment,
-//	}
-//
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
-
-func testAllNSPrometheus(t *testing.T) {
-	skipPrometheusTests(t)
+func testAllNSAlertmanager(t *testing.T) {
+	skipAlertmanagerTests(t)
 	testFuncs := map[string]func(t *testing.T){
-		//"PromCreateDeleteCluster":                testPromCreateDeleteCluster,
-		//"PromScaleUpDownCluster":                 testPromScaleUpDownCluster,
-		//"PromNoServiceMonitorSelector":           testPromNoServiceMonitorSelector,
-		//"PromVersionMigration":                   testPromVersionMigration,
-		//"PromResourceUpdate":                     testPromResourceUpdate,
-		//"PromStorageLabelsAnnotations":           testPromStorageLabelsAnnotations,
-		//"PromStorageUpdate":                      testPromStorageUpdate,
-		//"PromReloadConfig":                       testPromReloadConfig,
-		//"PromAdditionalScrapeConfig":             testPromAdditionalScrapeConfig,
-		//"PromAdditionalAlertManagerConfig":       testPromAdditionalAlertManagerConfig,
-		//"PromReloadRules":                        testPromReloadRules,
-		//"PromMultiplePrometheusRulesSameNS":      testPromMultiplePrometheusRulesSameNS,
-		//"PromMultiplePrometheusRulesDifferentNS": testPromMultiplePrometheusRulesDifferentNS,
-		//"PromRulesExceedingConfigMapLimit":       testPromRulesExceedingConfigMapLimit,
-		//"PromRulesMustBeAnnotated":               testPromRulesMustBeAnnotated,
-		//"PromtestInvalidRulesAreRejected":        testInvalidRulesAreRejected,
-		//"PromOnlyUpdatedOnRelevantChanges":       testPromOnlyUpdatedOnRelevantChanges,
-		//"PromWhenDeleteCRDCleanUpViaOwnerRef":    testPromWhenDeleteCRDCleanUpViaOwnerRef,
-		//"PromDiscovery":                          testPromDiscovery,
-		//"PromAlertmanagerDiscovery":              testPromAlertmanagerDiscovery,
-		//"PromExposingWithKubernetesAPI":          testPromExposingWithKubernetesAPI,
-		//"PromDiscoverTargetPort":                 testPromDiscoverTargetPort,
-		//"PromOpMatchPromAndServMonInDiffNSs":     testPromOpMatchPromAndServMonInDiffNSs,
-		//"PromGetAuthSecret":                      testPromGetAuthSecret,
-		//"PromArbitraryFSAcc":                     testPromArbitraryFSAcc,
-		//"PromTLSConfigViaSecret":                 testPromTLSConfigViaSecret,
-		"PromRemoteWriteWithTLS": testPromRemoteWriteWithTLS,
-		//"Thanos":                                 testThanos,
+		"AMCreateDeleteCluster":           testAMCreateDeleteCluster,
+		"AMScaling":                       testAMScaling,
+		"AMVersionMigration":              testAMVersionMigration,
+		"AMStorageUpdate":                 testAMStorageUpdate,
+		"AMExposingWithKubernetesAPI":     testAMExposingWithKubernetesAPI,
+		"AMClusterInitialization":         testAMClusterInitialization,
+		"AMClusterAfterRollingUpdate":     testAMClusterAfterRollingUpdate,
+		"AMClusterGossipSilences":         testAMClusterGossipSilences,
+		"AMReloadConfig":                  testAMReloadConfig,
+		"AMZeroDowntimeRollingDeployment": testAMZeroDowntimeRollingDeployment,
 	}
 
 	for name, f := range testFuncs {
@@ -194,68 +156,106 @@ func testAllNSPrometheus(t *testing.T) {
 	}
 }
 
-//func testAllNSThanosRuler(t *testing.T) {
-//	skipThanosRulerTests(t)
-//	testFuncs := map[string]func(t *testing.T){
-//		"ThanosRulerCreateDeleteCluster": testTRCreateDeleteCluster,
-//	}
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
-//
-//// TestMultiNS tests the Prometheus Operator configured to watch specific
-//// namespaces.
-//func TestMultiNS(t *testing.T) {
-//	testFuncs := map[string]func(t *testing.T){
-//		"OperatorNSScope": testOperatorNSScope,
-//	}
-//
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
-//
-//// TestDenylist tests the Prometheus Operator configured not to watch specific namespaces.
-//func TestDenylist(t *testing.T) {
-//	skipPrometheusTests(t)
-//	testFuncs := map[string]func(t *testing.T){
-//		"Prometheus":     testDenyPrometheus,
-//		"ServiceMonitor": testDenyServiceMonitor,
-//	}
-//
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
-//
-//// TestPromInstanceNs tests prometheus operator in different scenarios when --prometheus-instance-namespace is given
-//func TestPromInstanceNs(t *testing.T) {
-//	skipPrometheusTests(t)
-//	testFuncs := map[string]func(t *testing.T){
-//		"AllNs":     testPrometheusInstanceNamespaces_AllNs,
-//		"AllowList": testPrometheusInstanceNamespaces_AllowList,
-//		"DenyList":  testPrometheusInstanceNamespaces_DenyList,
-//	}
-//
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
-//
-//// TestAlertmanagerInstanceNs tests prometheus operator in different scenarios when --alertmanager-instance-namespace is given
-//func TestAlertmanagerInstanceNs(t *testing.T) {
-//	skipAlertmanagerTests(t)
-//	testFuncs := map[string]func(t *testing.T){
-//		"AllNs":  testAlertmanagerInstanceNamespaces_AllNs,
-//		"DenyNs": testAlertmanagerInstanceNamespaces_DenyNs,
-//	}
-//
-//	for name, f := range testFuncs {
-//		t.Run(name, f)
-//	}
-//}
-//
+func testAllNSPrometheus(t *testing.T) {
+	skipPrometheusTests(t)
+	testFuncs := map[string]func(t *testing.T){
+		"PromCreateDeleteCluster":                testPromCreateDeleteCluster,
+		"PromScaleUpDownCluster":                 testPromScaleUpDownCluster,
+		"PromNoServiceMonitorSelector":           testPromNoServiceMonitorSelector,
+		"PromVersionMigration":                   testPromVersionMigration,
+		"PromResourceUpdate":                     testPromResourceUpdate,
+		"PromStorageLabelsAnnotations":           testPromStorageLabelsAnnotations,
+		"PromStorageUpdate":                      testPromStorageUpdate,
+		"PromReloadConfig":                       testPromReloadConfig,
+		"PromAdditionalScrapeConfig":             testPromAdditionalScrapeConfig,
+		"PromAdditionalAlertManagerConfig":       testPromAdditionalAlertManagerConfig,
+		"PromReloadRules":                        testPromReloadRules,
+		"PromMultiplePrometheusRulesSameNS":      testPromMultiplePrometheusRulesSameNS,
+		"PromMultiplePrometheusRulesDifferentNS": testPromMultiplePrometheusRulesDifferentNS,
+		"PromRulesExceedingConfigMapLimit":       testPromRulesExceedingConfigMapLimit,
+		"PromRulesMustBeAnnotated":               testPromRulesMustBeAnnotated,
+		"PromtestInvalidRulesAreRejected":        testInvalidRulesAreRejected,
+		"PromOnlyUpdatedOnRelevantChanges":       testPromOnlyUpdatedOnRelevantChanges,
+		"PromWhenDeleteCRDCleanUpViaOwnerRef":    testPromWhenDeleteCRDCleanUpViaOwnerRef,
+		"PromDiscovery":                          testPromDiscovery,
+		"PromAlertmanagerDiscovery":              testPromAlertmanagerDiscovery,
+		"PromExposingWithKubernetesAPI":          testPromExposingWithKubernetesAPI,
+		"PromDiscoverTargetPort":                 testPromDiscoverTargetPort,
+		"PromOpMatchPromAndServMonInDiffNSs":     testPromOpMatchPromAndServMonInDiffNSs,
+		"PromGetAuthSecret":                      testPromGetAuthSecret,
+		"PromArbitraryFSAcc":                     testPromArbitraryFSAcc,
+		"PromTLSConfigViaSecret":                 testPromTLSConfigViaSecret,
+		"PromRemoteWriteWithTLS":                 testPromRemoteWriteWithTLS,
+		"Thanos":                                 testThanos,
+	}
+
+	for name, f := range testFuncs {
+		t.Run(name, f)
+	}
+}
+
+func testAllNSThanosRuler(t *testing.T) {
+	skipThanosRulerTests(t)
+	testFuncs := map[string]func(t *testing.T){
+		"ThanosRulerCreateDeleteCluster": testTRCreateDeleteCluster,
+	}
+	for name, f := range testFuncs {
+		t.Run(name, f)
+	}
+}
+
+// TestMultiNS tests the Prometheus Operator configured to watch specific
+// namespaces.
+func TestMultiNS(t *testing.T) {
+	testFuncs := map[string]func(t *testing.T){
+		"OperatorNSScope": testOperatorNSScope,
+	}
+
+	for name, f := range testFuncs {
+		t.Run(name, f)
+	}
+}
+
+// TestDenylist tests the Prometheus Operator configured not to watch specific namespaces.
+func TestDenylist(t *testing.T) {
+	skipPrometheusTests(t)
+	testFuncs := map[string]func(t *testing.T){
+		"Prometheus":     testDenyPrometheus,
+		"ServiceMonitor": testDenyServiceMonitor,
+	}
+
+	for name, f := range testFuncs {
+		t.Run(name, f)
+	}
+}
+
+// TestPromInstanceNs tests prometheus operator in different scenarios when --prometheus-instance-namespace is given
+func TestPromInstanceNs(t *testing.T) {
+	skipPrometheusTests(t)
+	testFuncs := map[string]func(t *testing.T){
+		"AllNs":     testPrometheusInstanceNamespaces_AllNs,
+		"AllowList": testPrometheusInstanceNamespaces_AllowList,
+		"DenyList":  testPrometheusInstanceNamespaces_DenyList,
+	}
+
+	for name, f := range testFuncs {
+		t.Run(name, f)
+	}
+}
+
+// TestAlertmanagerInstanceNs tests prometheus operator in different scenarios when --alertmanager-instance-namespace is given
+func TestAlertmanagerInstanceNs(t *testing.T) {
+	skipAlertmanagerTests(t)
+	testFuncs := map[string]func(t *testing.T){
+		"AllNs":  testAlertmanagerInstanceNamespaces_AllNs,
+		"DenyNs": testAlertmanagerInstanceNamespaces_DenyNs,
+	}
+
+	for name, f := range testFuncs {
+		t.Run(name, f)
+	}
+}
+
 const (
 	prometheusOperatorServiceName = "prometheus-operator"
 )
