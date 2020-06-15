@@ -4,7 +4,7 @@ metadata:
   name: meow
   namespace: mtls-routes
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: meow
