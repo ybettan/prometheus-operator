@@ -241,7 +241,7 @@ func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceN
 	}
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.com/", keySecretName,
+	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.alster.co.il/", keySecretName,
 		certResourceName, caResourceName, certResourceType, caResourceType)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
