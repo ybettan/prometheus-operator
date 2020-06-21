@@ -54,28 +54,42 @@ const (
 
 //FIXME: use test/framework/secret.go instead?
 //FIXME: use test/framework/config_map.go instead? if yes, I need to implement it
-func createK8sResources(t *testing.T, ns, certsDir, keyFilename, certFilename,
-	caFilename, keySecretName, certResourceName, caResourceName string,
-	certResourceType, caResourceType int) {
+func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
+	sKeyFilename, sCertFilename, caFilename, cKeySecretName, cCertResourceName, caResourceName string,
+	cCertResourceType, caResourceType int) {
 
-	var key, cert, ca []byte
+	var cKey, cCert, sKey, sCert, ca []byte
 	var err error
 
-	if keyFilename != "" {
-		key, err = ioutil.ReadFile(certsDir + keyFilename)
+	if cKeyFilename != "" {
+		cKey, err = ioutil.ReadFile(certsDir + cKeyFilename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", keyFilename, err)
+			t.Fatalf("failed to load %s: %v", cKeyFilename, err)
 		}
 	}
 
-	if certResourceName != "" {
-		cert, err = ioutil.ReadFile(certsDir + certFilename)
+	if cCertFilename != "" {
+		cCert, err = ioutil.ReadFile(certsDir + cCertFilename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", certFilename, err)
+			t.Fatalf("failed to load %s: %v", cCertFilename, err)
 		}
 	}
 
-	if caResourceName != "" {
+	if sKeyFilename != "" {
+		sKey, err = ioutil.ReadFile(certsDir + sKeyFilename)
+		if err != nil {
+			t.Fatalf("failed to load %s: %v", sKeyFilename, err)
+		}
+	}
+
+	if sCertFilename != "" {
+		sCert, err = ioutil.ReadFile(certsDir + sCertFilename)
+		if err != nil {
+			t.Fatalf("failed to load %s: %v", sCertFilename, err)
+		}
+	}
+
+	if caFilename != "" {
 		ca, err = ioutil.ReadFile(certsDir + caFilename)
 		if err != nil {
 			t.Fatalf("failed to load %s: %v", caFilename, err)
@@ -87,41 +101,54 @@ func createK8sResources(t *testing.T, ns, certsDir, keyFilename, certFilename,
 	secrets := []*v1.Secret{}
 	configMaps := []*v1.ConfigMap{}
 
-	if keyFilename != "" && certResourceName != "" {
+	s = &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "server-tls",
+			Namespace: ns,
+		},
+		Data: map[string][]byte{
+			"tls.key": sKey,
+			"tls.crt": sCert,
+			"ca.crt":  ca,
+		},
+	}
+	secrets = append(secrets, s)
+
+	if cKeyFilename != "" && cCertFilename != "" {
 		s = &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      keySecretName,
+				Name:      cKeySecretName,
 				Namespace: ns,
 			},
 			Data: map[string][]byte{
-				"key.pem": key,
+				"key.pem": cKey,
 			},
 		}
 		secrets = append(secrets, s)
 
-		if certResourceType == SECRET {
-			if certResourceName == keySecretName {
-				s.Data["cert.pem"] = cert
+		if cCertResourceType == SECRET {
+			if cCertResourceName == cKeySecretName {
+				s.Data["cert.pem"] = cCert
 			} else {
 				s = &v1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      certResourceName,
+						Name:      cCertResourceName,
 						Namespace: ns,
 					},
 					Data: map[string][]byte{
-						"cert.pem": cert,
+						"cert.pem": cCert,
 					},
 				}
 				secrets = append(secrets, s)
 			}
-		} else if certResourceType == CONFIGMAP {
+		} else if cCertResourceType == CONFIGMAP {
 			cm = &v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      certResourceName,
+					Name:      cCertResourceName,
 					Namespace: ns,
 				},
 				Data: map[string]string{
-					"cert.pem": string(cert),
+					"cert.pem": string(cCert),
 				},
 			}
 			configMaps = append(configMaps, cm)
@@ -130,11 +157,11 @@ func createK8sResources(t *testing.T, ns, certsDir, keyFilename, certFilename,
 		}
 	}
 
-	if caResourceName != "" {
+	if caFilename != "" {
 		if caResourceType == SECRET {
-			if caResourceName == keySecretName {
-				secrets[0].Data["ca.pem"] = ca
-			} else if caResourceName == certResourceName {
+			if caResourceName == cKeySecretName {
+				secrets[1].Data["ca.pem"] = ca
+			} else if caResourceName == cCertResourceName {
 				s.Data["ca.pem"] = ca
 			} else {
 				s = &v1.Secret{
@@ -149,7 +176,7 @@ func createK8sResources(t *testing.T, ns, certsDir, keyFilename, certFilename,
 				secrets = append(secrets, s)
 			}
 		} else if caResourceType == CONFIGMAP {
-			if caResourceName == certResourceName {
+			if caResourceName == cCertResourceName {
 				cm.Data["ca.pem"] = string(ca)
 			} else {
 				cm = &v1.ConfigMap{
@@ -180,6 +207,37 @@ func createK8sResources(t *testing.T, ns, certsDir, keyFilename, certFilename,
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func createK8sReceiver(t *testing.T, name, ns string) {
+
+	deploy, err := testFramework.MakeDeployment("../../test/framework/ressources/mtls/deployment.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deploy.ObjectMeta.Namespace = ns
+	if err := testFramework.CreateDeployment(framework.KubeClient, ns, deploy); err != nil {
+		t.Fatal("Creating server's deployment failed: ", err)
+	}
+
+	svc, err := testFramework.MakeService("../../test/framework/ressources/mtls/service.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.Namespace = ns
+	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
+		t.Fatal("Creating server's service failed: ", err)
+	}
+
+	ingress, err := testFramework.MakeIngress("../../test/framework/ressources/mtls/ingress.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ingress.Namespace = ns
+	ingress.ObjectMeta.Annotations["nginx.ingress.kubernetes.io/auth-tls-secret"] = ns + "/server-tls"
+	if err := testFramework.CreateIngress(framework.KubeClient, ns, ingress); err != nil {
+		t.Fatal("Creating server's ingress failed: ", err)
 	}
 }
 
@@ -269,40 +327,39 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 
 	expectedInLogs := "msg=\"Skipping resharding, last successful send was beyond threshold\" lastSendTimestamp="
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert-ca", "cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-ca", "cert", "key-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert-ca", "cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-ca", "cert", "key-ca", SECRET, SECRET, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert-ca", "cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert-ca", "cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key-ca", "cert", "key-ca", CONFIGMAP, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-ca", "cert", "key-ca", CONFIGMAP, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, SECRET, expectedInLogs, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "", "key-cert", "key-cert", "", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "", "key-cert", "key-cert", "", SECRET, SECRET, expectedInLogs, false)
 
 	// non working configurations - we will check it only for one configuration for simplicity - only one Secret
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "", "", "", "", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "server.key", "server.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "server.key", "server.crt", "", "", "", "", SECRET, SECRET, expectedInLogs, true)
 
 	expectedInLogs = "err=\"server returned HTTP status 400 Bad Request: <html>\""
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "ca.crt", "", "", "ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "server.key", "server.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "server.key", "server.crt", "ca.crt", "", "", "ca", SECRET, SECRET, expectedInLogs, false)
 
 }
 
-//FIXME: I need to add the installation of mTLSRoutes to the test
-func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, keyFilename, certFilename,
-	caFilename, keySecretName, certResourceName, caResourceName string,
-	certResourceType, caResourceType int, expectedInLogs string, revertLogMatch bool) {
+func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, cKeyFilename, cCertFilename,
+	sKeyFilename, sCertFilename, caFilename, cKeySecretName, cCertResourceName, caResourceName string,
+	cCertResourceType, caResourceType int, expectedInLogs string, revertLogMatch bool) {
 
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup(t)
@@ -313,8 +370,13 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, keyFilename, certFile
 
 	// apply authorized certificate and key to k8s as a Secret
 
-	createK8sResources(t, ns, certsDir, keyFilename, certFilename, caFilename, keySecretName,
-		certResourceName, caResourceName, certResourceType, caResourceType)
+	createK8sResources(t, ns, certsDir, cKeyFilename, cCertFilename, sKeyFilename,
+		sCertFilename, caFilename, cKeySecretName, cCertResourceName, caResourceName,
+		cCertResourceType, caResourceType)
+
+	// Setup server (receiver)
+
+	createK8sReceiver(t, name, ns)
 
 	// Setup sample app.
 
@@ -323,8 +385,8 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, keyFilename, certFile
 
 	// Setup monitoring.
 
-	prometheusCRD := createK8sAppMonitoring(t, name, ns, keySecretName, certResourceName,
-		caResourceName, certResourceType, caResourceType)
+	prometheusCRD := createK8sAppMonitoring(t, name, ns, cKeySecretName, cCertResourceName,
+		caResourceName, cCertResourceType, caResourceType)
 
 	//FIXME: make it wait by poll, there are some examples in other tests
 	time.Sleep(1 * time.Minute)
@@ -336,10 +398,10 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, keyFilename, certFile
 
 	if !revertLogMatch && !strings.Contains(logs, expectedInLogs) {
 		t.Fatalf("test with (%s, %s, %s) faild\nlogs should containe '%s' but it doesn't",
-			keyFilename, certFilename, caFilename, expectedInLogs)
+			cKeyFilename, cCertFilename, caFilename, expectedInLogs)
 	} else if revertLogMatch && strings.Contains(logs, expectedInLogs) {
 		t.Fatalf("test with (%s, %s, %s) faild\nlogs shouldn't containe '%s' but it does",
-			keyFilename, certFilename, caFilename, expectedInLogs)
+			cKeyFilename, cCertFilename, caFilename, expectedInLogs)
 	}
 }
 

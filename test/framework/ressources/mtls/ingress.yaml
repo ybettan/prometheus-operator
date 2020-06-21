@@ -3,9 +3,7 @@ kind: Ingress
 metadata:
   annotations:
     nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
-    nginx.ingress.kubernetes.io/auth-tls-secret: "mtls-routes/my-certs"
   name: meow-ingress
-  namespace: mtls-routes
 spec:
   rules:
   - host: meow.alster.co.il
@@ -18,4 +16,4 @@ spec:
   tls:
   - hosts:
     - meow.alster.co.il
-    secretName: my-certs
+    secretName: server-tls

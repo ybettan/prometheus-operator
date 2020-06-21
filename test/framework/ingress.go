@@ -21,40 +21,25 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 )
 
-func MakeBasicIngress(serviceName string, servicePort int) *v1beta1.Ingress {
-	return &v1beta1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "monitoring",
-		},
-		Spec: v1beta1.IngressSpec{
-			Rules: []v1beta1.IngressRule{
-				{
-					IngressRuleValue: v1beta1.IngressRuleValue{
-						HTTP: &v1beta1.HTTPIngressRuleValue{
-							Paths: []v1beta1.HTTPIngressPath{
-								{
-									Backend: v1beta1.IngressBackend{
-										ServiceName: serviceName,
-										ServicePort: intstr.FromInt(servicePort),
-									},
-									Path: "/metrics",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+func MakeIngress(pathToYaml string) (*v1beta1.Ingress, error) {
+	manifest, err := PathToOSFile(pathToYaml)
+	if err != nil {
+		return nil, err
 	}
+	ingress := v1beta1.Ingress{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&ingress); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to decode file %s", pathToYaml))
+	}
+
+	return &ingress, nil
 }
 
 func CreateIngress(kubeClient kubernetes.Interface, namespace string, i *v1beta1.Ingress) error {

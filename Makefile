@@ -217,15 +217,8 @@ test/instrumented-sample-app/certs/cert.pem test/instrumented-sample-app/certs/k
 
 .PHONY: test-e2e
 test-e2e: KUBECONFIG?=$(HOME)/.kube/config
-test-e2e: test/instrumented-sample-app/certs/cert.pem test/instrumented-sample-app/certs/key.pem #FIXME: add other files dependencies
-	kubectl create namespace mtls-routes
-	kubectl -n mtls-routes create secret generic my-certs \
-	    --from-file=tls.crt=test/e2e/remote_write_certs/server.crt \
-	    --from-file=tls.key=test/e2e/remote_write_certs/server.key \
-	    --from-file=ca.crt=test/e2e/remote_write_certs/ca.crt
-	kubectl apply -f test/framework/ressources/mtls/
+test-e2e: test/instrumented-sample-app/certs/cert.pem test/instrumented-sample-app/certs/key.pem
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG) --operator-image=$(REPO):$(TAG) -count=1
-	kubectl delete namespace/mtls-routes
 
 ############
 # Binaries #
