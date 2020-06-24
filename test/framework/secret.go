@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+//FIXME: remove caBytes param?
 func CreateSecretWithCert(kubeClient kubernetes.Interface, certBytes, keyBytes, caBytes []byte, ns string, name string) error {
 
 	secret := &corev1.Secret{

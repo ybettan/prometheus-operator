@@ -72,7 +72,8 @@ func (f *Framework) MakeBasicPrometheus(ns, name, group string, replicas int32) 
 }
 
 func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus,
-	url, keySecretName, certResourceName, caResourceName string, certType, caType int) {
+	url, keySecretName, certResourceName, caResourceName string, certType, caType int,
+	insecureSkipVerify bool) {
 
 	p.Spec.RemoteWrite = []monitoringv1.RemoteWriteSpec{{
 		URL: url,
@@ -80,7 +81,9 @@ func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus
 
 	if (keySecretName != "" && certResourceName != "") || caResourceName != "" {
 
-		p.Spec.RemoteWrite[0].TLSConfig = &monitoringv1.TLSConfig{}
+		p.Spec.RemoteWrite[0].TLSConfig = &monitoringv1.TLSConfig{
+			ServerName: "caandserver.com",
+		}
 
 		if keySecretName != "" && certResourceName != "" {
 			p.Spec.RemoteWrite[0].TLSConfig.KeySecret = &v1.SecretKeySelector{
@@ -125,7 +128,7 @@ func (f *Framework) AddRemoteWriteWithTLSToPrometheus(p *monitoringv1.Prometheus
 					Key: "ca.pem",
 				}
 			}
-		} else {
+		} else if insecureSkipVerify {
 			p.Spec.RemoteWrite[0].TLSConfig.InsecureSkipVerify = true
 		}
 	}

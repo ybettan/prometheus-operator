@@ -33,6 +33,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -54,43 +55,43 @@ const (
 
 //FIXME: use test/framework/secret.go instead?
 //FIXME: use test/framework/config_map.go instead? if yes, I need to implement it
-func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
-	sKeyFilename, sCertFilename, caFilename, cKeySecretName, cCertResourceName, caResourceName string,
-	cCertResourceType, caResourceType int) {
+func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCertFilename,
+	serverKeyFilename, serverCertFilename, caFilename, clientKeySecretName, clientCertResourceName, caResourceName string,
+	clientCertResourceType, caResourceType int) {
 
-	var cKey, cCert, sKey, sCert, ca []byte
+	var clientKey, clientCert, serverKey, serverCert, caCert []byte
 	var err error
 
-	if cKeyFilename != "" {
-		cKey, err = ioutil.ReadFile(certsDir + cKeyFilename)
+	if clientKeyFilename != "" {
+		clientKey, err = ioutil.ReadFile(certsDir + clientKeyFilename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", cKeyFilename, err)
+			t.Fatalf("failed to load %s: %v", clientKeyFilename, err)
 		}
 	}
 
-	if cCertFilename != "" {
-		cCert, err = ioutil.ReadFile(certsDir + cCertFilename)
+	if clientCertFilename != "" {
+		clientCert, err = ioutil.ReadFile(certsDir + clientCertFilename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", cCertFilename, err)
+			t.Fatalf("failed to load %s: %v", clientCertFilename, err)
 		}
 	}
 
-	if sKeyFilename != "" {
-		sKey, err = ioutil.ReadFile(certsDir + sKeyFilename)
+	if serverKeyFilename != "" {
+		serverKey, err = ioutil.ReadFile(certsDir + serverKeyFilename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", sKeyFilename, err)
+			t.Fatalf("failed to load %s: %v", serverKeyFilename, err)
 		}
 	}
 
-	if sCertFilename != "" {
-		sCert, err = ioutil.ReadFile(certsDir + sCertFilename)
+	if serverCertFilename != "" {
+		serverCert, err = ioutil.ReadFile(certsDir + serverCertFilename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", sCertFilename, err)
+			t.Fatalf("failed to load %s: %v", serverCertFilename, err)
 		}
 	}
 
 	if caFilename != "" {
-		ca, err = ioutil.ReadFile(certsDir + caFilename)
+		caCert, err = ioutil.ReadFile(certsDir + caFilename)
 		if err != nil {
 			t.Fatalf("failed to load %s: %v", caFilename, err)
 		}
@@ -107,48 +108,47 @@ func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
 			Namespace: ns,
 		},
 		Data: map[string][]byte{
-			"tls.key": sKey,
-			"tls.crt": sCert,
-			"ca.crt":  ca,
+			"key.pem":  serverKey,
+			"cert.pem": serverCert,
 		},
 	}
 	secrets = append(secrets, s)
 
-	if cKeyFilename != "" && cCertFilename != "" {
+	if clientKeyFilename != "" && clientCertFilename != "" {
 		s = &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      cKeySecretName,
+				Name:      clientKeySecretName,
 				Namespace: ns,
 			},
 			Data: map[string][]byte{
-				"key.pem": cKey,
+				"key.pem": clientKey,
 			},
 		}
 		secrets = append(secrets, s)
 
-		if cCertResourceType == SECRET {
-			if cCertResourceName == cKeySecretName {
-				s.Data["cert.pem"] = cCert
+		if clientCertResourceType == SECRET {
+			if clientCertResourceName == clientKeySecretName {
+				s.Data["cert.pem"] = clientCert
 			} else {
 				s = &v1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      cCertResourceName,
+						Name:      clientCertResourceName,
 						Namespace: ns,
 					},
 					Data: map[string][]byte{
-						"cert.pem": cCert,
+						"cert.pem": clientCert,
 					},
 				}
 				secrets = append(secrets, s)
 			}
-		} else if cCertResourceType == CONFIGMAP {
+		} else if clientCertResourceType == CONFIGMAP {
 			cm = &v1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      cCertResourceName,
+					Name:      clientCertResourceName,
 					Namespace: ns,
 				},
 				Data: map[string]string{
-					"cert.pem": string(cCert),
+					"cert.pem": string(clientCert),
 				},
 			}
 			configMaps = append(configMaps, cm)
@@ -159,10 +159,10 @@ func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
 
 	if caFilename != "" {
 		if caResourceType == SECRET {
-			if caResourceName == cKeySecretName {
-				secrets[1].Data["ca.pem"] = ca
-			} else if caResourceName == cCertResourceName {
-				s.Data["ca.pem"] = ca
+			if caResourceName == clientKeySecretName {
+				secrets[1].Data["ca.pem"] = caCert
+			} else if caResourceName == clientCertResourceName {
+				s.Data["ca.pem"] = caCert
 			} else {
 				s = &v1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -170,14 +170,14 @@ func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
 						Namespace: ns,
 					},
 					Data: map[string][]byte{
-						"ca.pem": ca,
+						"ca.pem": caCert,
 					},
 				}
 				secrets = append(secrets, s)
 			}
 		} else if caResourceType == CONFIGMAP {
-			if caResourceName == cCertResourceName {
-				cm.Data["ca.pem"] = string(ca)
+			if caResourceName == clientCertResourceName {
+				cm.Data["ca.pem"] = string(caCert)
 			} else {
 				cm = &v1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
@@ -185,7 +185,7 @@ func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
 						Namespace: ns,
 					},
 					Data: map[string]string{
-						"ca.pem": string(ca),
+						"ca.pem": string(caCert),
 					},
 				}
 				configMaps = append(configMaps, cm)
@@ -210,42 +210,31 @@ func createK8sResources(t *testing.T, ns, certsDir, cKeyFilename, cCertFilename,
 	}
 }
 
-func createK8sReceiver(t *testing.T, name, ns string) {
-
-	deploy, err := testFramework.MakeDeployment("../../test/framework/ressources/mtls/deployment.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	deploy.ObjectMeta.Namespace = ns
-	if err := testFramework.CreateDeployment(framework.KubeClient, ns, deploy); err != nil {
-		t.Fatal("Creating server's deployment failed: ", err)
-	}
-
-	svc, err := testFramework.MakeService("../../test/framework/ressources/mtls/service.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc.Namespace = ns
-	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
-		t.Fatal("Creating server's service failed: ", err)
-	}
-
-	ingress, err := testFramework.MakeIngress("../../test/framework/ressources/mtls/ingress.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ingress.Namespace = ns
-	ingress.ObjectMeta.Annotations["nginx.ingress.kubernetes.io/auth-tls-secret"] = ns + "/server-tls"
-	if err := testFramework.CreateIngress(framework.KubeClient, ns, ingress); err != nil {
-		t.Fatal("Creating server's ingress failed: ", err)
-	}
-}
-
-func createK8sSampleApp(t *testing.T, name, ns string) {
+func createK8sSampleApp(t *testing.T, name, ns string) (string, int32) {
 
 	simple, err := testFramework.MakeDeployment("../../test/framework/ressources/basic-auth-app-deployment.yaml")
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	simple.Spec.Template.Spec.Containers[0].Args = []string{"--cert-path=/etc/certs"}
+
+	simple.Spec.Template.Spec.Volumes = []v1.Volume{
+		v1.Volume{
+			Name: "tls-certs",
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: "server-tls",
+				},
+			},
+		},
+	}
+
+	simple.Spec.Template.Spec.Containers[0].VolumeMounts = []v1.VolumeMount{
+		{
+			Name:      simple.Spec.Template.Spec.Volumes[0].Name,
+			MountPath: "/etc/certs",
+		},
 	}
 
 	if err := testFramework.CreateDeployment(framework.KubeClient, ns, simple); err != nil {
@@ -280,11 +269,19 @@ func createK8sSampleApp(t *testing.T, name, ns string) {
 	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
 		t.Fatal(err)
 	}
+
+	svc, err = framework.KubeClient.CoreV1().Services(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return svc.Spec.ClusterIP, svc.Spec.Ports[1].Port
 }
 
 func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceName, caResourceName string,
-	certResourceType, caResourceType int) *monitoringv1.Prometheus {
+	certResourceType, caResourceType int, svcIp string, svcTLSPort int32, insecureSkipVerify bool) {
 
+	//FIXME: use http port here instead?
 	sm := framework.MakeBasicServiceMonitor(name)
 	sm.Spec.Endpoints = []monitoringv1.Endpoint{
 		{
@@ -294,13 +291,16 @@ func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceN
 		},
 	}
 
+	//FIXME: something in the scraping causes errors in instrumented-sample-app logs:
+	// "2020/06/25 08:37:57 http: TLS handshake error from 172.17.0.7:36392: remote error: tls: bad certificate"
 	if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), sm, metav1.CreateOptions{}); err != nil {
 		t.Fatal("creating ServiceMonitor failed: ", err)
 	}
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, "https://meow.alster.co.il/", keySecretName,
-		certResourceName, caResourceName, certResourceType, caResourceType)
+	url := "https://" + svcIp + ":" + fmt.Sprint(svcTLSPort)
+	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, url, keySecretName,
+		certResourceName, caResourceName, certResourceType, caResourceType, insecureSkipVerify)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
@@ -315,8 +315,6 @@ func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceN
 	if err := framework.WaitForTargets(ns, promSVC.Name, 1); err != nil {
 		t.Fatal(err)
 	}
-
-	return prometheusCRD
 }
 
 func testPromRemoteWriteWithTLS(t *testing.T) {
@@ -327,39 +325,47 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 
 	expectedInLogs := "msg=\"Skipping resharding, last successful send was beyond threshold\" lastSendTimestamp="
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert-ca", "cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-ca", "cert", "key-ca", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", SECRET, SECRET, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", SECRET, SECRET, expectedInLogs, false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert-ca", "cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-cert", "key-cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", SECRET, CONFIGMAP, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, CONFIGMAP, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, CONFIGMAP, expectedInLogs, false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key-ca", "cert", "key-ca", CONFIGMAP, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "ca.crt", "key", "cert", "ca", CONFIGMAP, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", CONFIGMAP, SECRET, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, SECRET, expectedInLogs, false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "", "key-cert", "key-cert", "", SECRET, SECRET, expectedInLogs, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, expectedInLogs, true, true)
 
 	// non working configurations - we will check it only for one configuration for simplicity - only one Secret
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "server.key", "server.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "server.key", "server.crt", "bad_ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "server.key", "server.crt", "", "", "", "", SECRET, SECRET, expectedInLogs, true)
+	expectedInLogs = "remote error: tls: bad certificate"
 
-	expectedInLogs = "err=\"server returned HTTP status 400 Bad Request: <html>\""
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.key", "ca.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "ca.key", "ca.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "ca.key", "ca.crt", "", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "ca.key", "ca.crt", "bad_ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "ca.key", "ca.crt", "", "", "", "", SECRET, SECRET, expectedInLogs, false, false)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "server.key", "server.crt", "ca.crt", "key-cert-ca", "key-cert-ca", "key-cert-ca", SECRET, SECRET, expectedInLogs, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "server.key", "server.crt", "ca.crt", "", "", "ca", SECRET, SECRET, expectedInLogs, false)
+	expectedInLogs = "tls: failed to verify client's certificate: x509: certificate signed by unknown authority"
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "ca.key", "ca.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
+
+	expectedInLogs = "tls: client didn't provide a certificate"
+
+	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "ca.key", "ca.crt", "ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
 
 }
 
-func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, cKeyFilename, cCertFilename,
-	sKeyFilename, sCertFilename, caFilename, cKeySecretName, cCertResourceName, caResourceName string,
-	cCertResourceType, caResourceType int, expectedInLogs string, revertLogMatch bool) {
+func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, clientCertFilename,
+	serverKeyFilename, serverCertFilename, caFilename, clientKeySecretName, clientCertResourceName, caResourceName string,
+	clientCertResourceType, caResourceType int, expectedInLogs string, insecureSkipVerify, shouldSuccess bool) {
 
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup(t)
@@ -370,38 +376,63 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, cKeyFilename, cCertFi
 
 	// apply authorized certificate and key to k8s as a Secret
 
-	createK8sResources(t, ns, certsDir, cKeyFilename, cCertFilename, sKeyFilename,
-		sCertFilename, caFilename, cKeySecretName, cCertResourceName, caResourceName,
-		cCertResourceType, caResourceType)
+	createK8sResources(t, ns, certsDir, clientKeyFilename, clientCertFilename,
+		serverKeyFilename, serverCertFilename, caFilename, clientKeySecretName, clientCertResourceName,
+		caResourceName, clientCertResourceType, caResourceType)
 
-	// Setup server (receiver)
+	// Setup a sample-app which supports mTLS therefore will play 2 roles:
+	// 	1. app scraped by prometheus
+	// 	2. TLS receiver for prometheus remoteWrite
 
-	createK8sReceiver(t, name, ns)
-
-	// Setup sample app.
-
-	//FIXME: shoudl I create the app once for all the tests?
-	createK8sSampleApp(t, name, ns)
+	//TODO: create the app once for all the tests to speed things up
+	svcIp, svcTLSPort := createK8sSampleApp(t, name, ns)
 
 	// Setup monitoring.
 
-	prometheusCRD := createK8sAppMonitoring(t, name, ns, cKeySecretName, cCertResourceName,
-		caResourceName, cCertResourceType, caResourceType)
+	createK8sAppMonitoring(t, name, ns, clientKeySecretName, clientCertResourceName,
+		caResourceName, clientCertResourceType, caResourceType, svcIp, svcTLSPort, insecureSkipVerify)
 
-	//FIXME: make it wait by poll, there are some examples in other tests
+	//TODO: make it wait by poll, there are some examples in other tests
 	time.Sleep(1 * time.Minute)
 
-	logs, err := testFramework.GetLogs(framework.KubeClient, ns, "prometheus-"+prometheusCRD.Name+"-0", "prometheus")
+	appOpts := metav1.ListOptions{
+		LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
+			"group": name,
+		})).String(),
+	}
+
+	prometheusOpts := metav1.ListOptions{
+		LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
+			"app": "prometheus",
+		})).String(),
+	}
+
+	appPodList, err := framework.KubeClient.CoreV1().Pods(ns).List(context.TODO(), appOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !revertLogMatch && !strings.Contains(logs, expectedInLogs) {
+	prometheusPodList, err := framework.KubeClient.CoreV1().Pods(ns).List(context.TODO(), prometheusOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	appLogs, err := testFramework.GetLogs(framework.KubeClient, ns, appPodList.Items[0].ObjectMeta.Name, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prometheusLogs, err := testFramework.GetLogs(framework.KubeClient, ns, prometheusPodList.Items[0].ObjectMeta.Name, "prometheus")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if shouldSuccess && !strings.Contains(prometheusLogs, expectedInLogs) {
 		t.Fatalf("test with (%s, %s, %s) faild\nlogs should containe '%s' but it doesn't",
-			cKeyFilename, cCertFilename, caFilename, expectedInLogs)
-	} else if revertLogMatch && strings.Contains(logs, expectedInLogs) {
+			clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
+	} else if !shouldSuccess && !strings.Contains(appLogs, expectedInLogs) {
 		t.Fatalf("test with (%s, %s, %s) faild\nlogs shouldn't containe '%s' but it does",
-			cKeyFilename, cCertFilename, caFilename, expectedInLogs)
+			clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
 	}
 }
 
