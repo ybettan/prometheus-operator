@@ -53,8 +53,6 @@ const (
 	CONFIGMAP = 2
 )
 
-//FIXME: use test/framework/secret.go instead?
-//FIXME: use test/framework/config_map.go instead? if yes, I need to implement it
 func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCertFilename,
 	serverKeyFilename, serverCertFilename, caFilename, clientKeySecretName, clientCertResourceName, caResourceName string,
 	clientCertResourceType, caResourceType int) {
@@ -120,15 +118,8 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 				secrets = append(secrets, s)
 			}
 		} else if clientCertResourceType == CONFIGMAP {
-			cm = &v1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clientCertResourceName,
-					Namespace: ns,
-				},
-				Data: map[string]string{
-					"cert.pem": string(clientCert),
-				},
-			}
+			cm = testFramework.MakeConfigMapWithCert(framework.KubeClient, ns, clientCertResourceName,
+				"", "cert.pem", "", nil, clientCert, nil)
 			configMaps = append(configMaps, cm)
 		} else {
 			t.Fatal("cert must be a Secret or a ConfigMap")
@@ -150,15 +141,8 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 			if caResourceName == clientCertResourceName {
 				cm.Data["ca.pem"] = string(caCert)
 			} else {
-				cm = &v1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      caResourceName,
-						Namespace: ns,
-					},
-					Data: map[string]string{
-						"ca.pem": string(caCert),
-					},
-				}
+				cm = testFramework.MakeConfigMapWithCert(framework.KubeClient, ns, caResourceName,
+					"", "", "ca.pem", nil, nil, caCert)
 				configMaps = append(configMaps, cm)
 			}
 		} else {
