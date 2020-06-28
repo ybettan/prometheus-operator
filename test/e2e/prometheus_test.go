@@ -393,7 +393,7 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, cl
 		caResourceName, clientCertResourceType, caResourceType, svcIp, svcTLSPort, insecureSkipVerify)
 
 	//TODO: make it wait by poll, there are some examples in other tests
-	time.Sleep(1 * time.Minute)
+	time.Sleep(45 * time.Second)
 
 	appOpts := metav1.ListOptions{
 		LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
