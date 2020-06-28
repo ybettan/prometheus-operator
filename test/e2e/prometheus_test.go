@@ -102,43 +102,21 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 	secrets := []*v1.Secret{}
 	configMaps := []*v1.ConfigMap{}
 
-	s = &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "server-tls",
-			Namespace: ns,
-		},
-		Data: map[string][]byte{
-			"key.pem":  serverKey,
-			"cert.pem": serverCert,
-		},
-	}
+	s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, "server-tls",
+		"key.pem", "cert.pem", "", serverKey, serverCert, nil)
 	secrets = append(secrets, s)
 
 	if clientKeyFilename != "" && clientCertFilename != "" {
-		s = &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clientKeySecretName,
-				Namespace: ns,
-			},
-			Data: map[string][]byte{
-				"key.pem": clientKey,
-			},
-		}
+		s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, clientKeySecretName,
+			"key.pem", "", "", clientKey, nil, nil)
 		secrets = append(secrets, s)
 
 		if clientCertResourceType == SECRET {
 			if clientCertResourceName == clientKeySecretName {
 				s.Data["cert.pem"] = clientCert
 			} else {
-				s = &v1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clientCertResourceName,
-						Namespace: ns,
-					},
-					Data: map[string][]byte{
-						"cert.pem": clientCert,
-					},
-				}
+				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, clientCertResourceName,
+					"", "cert.pem", "", nil, clientCert, nil)
 				secrets = append(secrets, s)
 			}
 		} else if clientCertResourceType == CONFIGMAP {
@@ -164,15 +142,8 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 			} else if caResourceName == clientCertResourceName {
 				s.Data["ca.pem"] = caCert
 			} else {
-				s = &v1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      caResourceName,
-						Namespace: ns,
-					},
-					Data: map[string][]byte{
-						"ca.pem": caCert,
-					},
-				}
+				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, caResourceName,
+					"", "", "ca.pem", nil, nil, caCert)
 				secrets = append(secrets, s)
 			}
 		} else if caResourceType == CONFIGMAP {

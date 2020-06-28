@@ -196,7 +196,7 @@ func (f *Framework) CreatePrometheusOperator(ns, opImage string, namespaceAllowl
 		return nil, errors.Wrap(err, "failed to generate certificate and key")
 	}
 
-	if err := CreateSecretWithCert(f.KubeClient, certBytes, keyBytes, nil, ns, admissionHookSecretName); err != nil {
+	if err := CreateSecretWithCert(f.KubeClient, certBytes, keyBytes, ns, admissionHookSecretName); err != nil {
 		return nil, errors.Wrap(err, "failed to create admission webhook secret")
 	}
 

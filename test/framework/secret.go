@@ -22,18 +22,33 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-//FIXME: remove caBytes param?
-func CreateSecretWithCert(kubeClient kubernetes.Interface, certBytes, keyBytes, caBytes []byte, ns string, name string) error {
+func MakeSecretWithCert(kubeClient kubernetes.Interface, ns, name, keyKey, certKey, caKey string,
+	keyBytes, certBytes, caBytes []byte) *corev1.Secret {
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Type:       corev1.SecretType("Opaque"),
-		Data:       map[string][]byte{"tls.crt": certBytes, "tls.key": keyBytes}}
-
-	if caBytes != nil {
-		secret.Data["ca.crt"] = caBytes
+		Data:       map[string][]byte{},
 	}
 
+	if keyBytes != nil {
+		secret.Data[keyKey] = keyBytes
+	}
+
+	if certBytes != nil {
+		secret.Data[certKey] = certBytes
+	}
+
+	if caBytes != nil {
+		secret.Data[caKey] = caBytes
+	}
+
+	return secret
+}
+
+func CreateSecretWithCert(kubeClient kubernetes.Interface, certBytes, keyBytes []byte, ns, name string) error {
+
+	secret := MakeSecretWithCert(kubeClient, ns, name, "tls.key", "tls.crt", "", keyBytes, certBytes, nil)
 	_, err := kubeClient.CoreV1().Secrets(ns).Create(context.TODO(), secret, metav1.CreateOptions{})
 
 	return err
