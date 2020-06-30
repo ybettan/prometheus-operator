@@ -53,6 +53,7 @@ const (
 	CONFIGMAP = 2
 )
 
+//FIXME: remove server.{key, cert} ?
 func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCertFilename,
 	serverKeyFilename, serverCertFilename, caFilename, clientKeySecretName, clientCertResourceName, caResourceName string,
 	clientCertResourceType, caResourceType int) {
@@ -95,18 +96,32 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 		}
 	}
 
+	scrapingKey, err := ioutil.ReadFile(certsDir + "client.key")
+	if err != nil {
+		t.Fatalf("failed to load %s: %v", "client.key", err)
+	}
+
+	scrapingCert, err := ioutil.ReadFile(certsDir + "client.crt")
+	if err != nil {
+		t.Fatalf("failed to load %s: %v", "client.crt", err)
+	}
+
 	var s *v1.Secret
 	var cm *v1.ConfigMap
 	secrets := []*v1.Secret{}
 	configMaps := []*v1.ConfigMap{}
 
+	s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, "scraping-tls",
+		[]string{"key.pem", "cert.pem"}, [][]byte{scrapingKey, scrapingCert})
+	secrets = append(secrets, s)
+
 	s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, "server-tls",
-		"key.pem", "cert.pem", "", serverKey, serverCert, nil)
+		[]string{"key.pem", "cert.pem"}, [][]byte{serverKey, serverCert})
 	secrets = append(secrets, s)
 
 	if clientKeyFilename != "" && clientCertFilename != "" {
 		s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, clientKeySecretName,
-			"key.pem", "", "", clientKey, nil, nil)
+			[]string{"key.pem"}, [][]byte{clientKey})
 		secrets = append(secrets, s)
 
 		if clientCertResourceType == SECRET {
@@ -114,7 +129,7 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 				s.Data["cert.pem"] = clientCert
 			} else {
 				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, clientCertResourceName,
-					"", "cert.pem", "", nil, clientCert, nil)
+					[]string{"cert.pem"}, [][]byte{clientCert})
 				secrets = append(secrets, s)
 			}
 		} else if clientCertResourceType == CONFIGMAP {
@@ -129,12 +144,12 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 	if caFilename != "" {
 		if caResourceType == SECRET {
 			if caResourceName == clientKeySecretName {
-				secrets[1].Data["ca.pem"] = caCert
+				secrets[2].Data["ca.pem"] = caCert
 			} else if caResourceName == clientCertResourceName {
 				s.Data["ca.pem"] = caCert
 			} else {
 				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, caResourceName,
-					"", "", "ca.pem", nil, nil, caCert)
+					[]string{"ca.pem"}, [][]byte{caCert})
 				secrets = append(secrets, s)
 			}
 		} else if caResourceType == CONFIGMAP {
@@ -236,23 +251,38 @@ func createK8sSampleApp(t *testing.T, name, ns string) (string, int32) {
 func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceName, caResourceName string,
 	certResourceType, caResourceType int, svcIp string, svcTLSPort int32, insecureSkipVerify bool) {
 
-	//FIXME: use http port here instead?
 	sm := framework.MakeBasicServiceMonitor(name)
 	sm.Spec.Endpoints = []monitoringv1.Endpoint{
 		{
 			Port:     "mtls",
 			Interval: "30s",
 			Scheme:   "https",
+			TLSConfig: &monitoringv1.TLSConfig{
+				InsecureSkipVerify: true,
+				Cert: monitoringv1.SecretOrConfigMap{
+					Secret: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: "scraping-tls",
+						},
+						Key: "cert.pem",
+					},
+				},
+				KeySecret: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: "scraping-tls",
+					},
+					Key: "key.pem",
+				},
+			},
 		},
 	}
 
-	//FIXME: something in the scraping causes errors in instrumented-sample-app logs:
-	// "2020/06/25 08:37:57 http: TLS handshake error from 172.17.0.7:36392: remote error: tls: bad certificate"
 	if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), sm, metav1.CreateOptions{}); err != nil {
 		t.Fatal("creating ServiceMonitor failed: ", err)
 	}
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
+	prometheusCRD.Spec.Secrets = append(prometheusCRD.Spec.Secrets, "scraping-tls")
 	url := "https://" + svcIp + ":" + fmt.Sprint(svcTLSPort)
 	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, url, keySecretName,
 		certResourceName, caResourceName, certResourceType, caResourceType, insecureSkipVerify)
@@ -339,7 +369,6 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, cl
 	// 	1. app scraped by prometheus
 	// 	2. TLS receiver for prometheus remoteWrite
 
-	//TODO: create the app once for all the tests to speed things up
 	svcIp, svcTLSPort := createK8sSampleApp(t, name, ns)
 
 	// Setup monitoring.
@@ -382,11 +411,16 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, cl
 		t.Fatal(err)
 	}
 
-	if shouldSuccess && !strings.Contains(prometheusLogs, expectedInLogs) {
-		t.Fatalf("test with (%s, %s, %s) faild\nlogs should containe '%s' but it doesn't",
-			clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
+	if shouldSuccess {
+		if !strings.Contains(prometheusLogs, expectedInLogs) {
+			t.Fatalf("test with (%s, %s, %s) faild\nprometheus logs should containe '%s' but it doesn't",
+				clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
+		}
+		if strings.Contains(appLogs, "remote error: tls: bad certificate") {
+			t.Fatal(appLogs)
+		}
 	} else if !shouldSuccess && !strings.Contains(appLogs, expectedInLogs) {
-		t.Fatalf("test with (%s, %s, %s) faild\nlogs shouldn't containe '%s' but it does",
+		t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs should containe '%s' but it doesn't",
 			clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
 	}
 }

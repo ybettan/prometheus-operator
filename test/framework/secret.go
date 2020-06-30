@@ -22,8 +22,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func MakeSecretWithCert(kubeClient kubernetes.Interface, ns, name, keyKey, certKey, caKey string,
-	keyBytes, certBytes, caBytes []byte) *corev1.Secret {
+func MakeSecretWithCert(kubeClient kubernetes.Interface, ns, name string, keyList []string,
+	dataList [][]byte) *corev1.Secret {
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
@@ -31,16 +31,8 @@ func MakeSecretWithCert(kubeClient kubernetes.Interface, ns, name, keyKey, certK
 		Data:       map[string][]byte{},
 	}
 
-	if keyBytes != nil {
-		secret.Data[keyKey] = keyBytes
-	}
-
-	if certBytes != nil {
-		secret.Data[certKey] = certBytes
-	}
-
-	if caBytes != nil {
-		secret.Data[caKey] = caBytes
+	for i, _ := range keyList {
+		secret.Data[keyList[i]] = dataList[i]
 	}
 
 	return secret
@@ -48,7 +40,7 @@ func MakeSecretWithCert(kubeClient kubernetes.Interface, ns, name, keyKey, certK
 
 func CreateSecretWithCert(kubeClient kubernetes.Interface, certBytes, keyBytes []byte, ns, name string) error {
 
-	secret := MakeSecretWithCert(kubeClient, ns, name, "tls.key", "tls.crt", "", keyBytes, certBytes, nil)
+	secret := MakeSecretWithCert(kubeClient, ns, name, []string{"tls.key", "tls.crt"}, [][]byte{keyBytes, certBytes})
 	_, err := kubeClient.CoreV1().Secrets(ns).Create(context.TODO(), secret, metav1.CreateOptions{})
 
 	return err
