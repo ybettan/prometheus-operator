@@ -53,7 +53,6 @@ const (
 	CONFIGMAP = 2
 )
 
-//FIXME: remove server.{key, cert} ?
 func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCertFilename,
 	caFilename, clientKeySecretName, clientCertResourceName, caResourceName string,
 	clientCertResourceType, caResourceType int) {
@@ -298,55 +297,62 @@ func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceN
 	}
 }
 
-func testPromRemoteWriteWithTLS(t *testing.T) {
+var (
+	certsDir       = "../../test/e2e/remote_write_certs/"
+	possibleErrors = map[string]string{
+		"bad_server_cert": "tls: bad certificate",
+		"bad_client_cert": "tls: failed to verify client's certificate: x509: certificate signed by unknown authority",
+		"no_client_cert":  "tls: client didn't provide a certificate",
+	}
+)
 
-	certsDir := "../../test/e2e/remote_write_certs/"
+func testPromRemoteWriteWithTLS(t *testing.T) {
 
 	// working configurations
 
-	expectedInLogs := "msg=\"Skipping resharding, last successful send was beyond threshold\" lastSendTimestamp="
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, SECRET, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, SECRET, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", SECRET, SECRET, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", SECRET, SECRET, "", false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", SECRET, SECRET, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", SECRET, SECRET, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", CONFIGMAP, CONFIGMAP, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, CONFIGMAP, "", false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, CONFIGMAP, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, CONFIGMAP, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, CONFIGMAP, "", false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, CONFIGMAP, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, CONFIGMAP, expectedInLogs, false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", CONFIGMAP, SECRET, "", false, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, SECRET, "", false, true)
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", CONFIGMAP, SECRET, expectedInLogs, false, true)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, SECRET, expectedInLogs, false, true)
-
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, expectedInLogs, true, true)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, "", true, true)
 
 	// non working configurations - we will check it only for one configuration for simplicity - only one Secret
 
-	expectedInLogs = "remote error: tls: bad certificate"
+	expectedInLogs := "bad_server_cert"
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "client.key", "client.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "bad_ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "", "", "", "", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "bad_client.key", "bad_client.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "bad_client.key", "bad_client.crt", "", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "", "", "bad_ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "", "", "", "", "", "", SECRET, SECRET, expectedInLogs, false, false)
 
-	expectedInLogs = "tls: failed to verify client's certificate: x509: certificate signed by unknown authority"
+	expectedInLogs = "bad_client_cert"
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "bad_client.key", "bad_client.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "bad_client.key", "bad_client.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
 
-	expectedInLogs = "tls: client didn't provide a certificate"
+	expectedInLogs = "no_client_cert"
 
-	testPromRemoteWriteWithTLSAux(t, certsDir, "", "", "ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
+	testPromRemoteWriteWithTLSAux(t, "", "", "ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
 
 }
 
-func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, clientCertFilename, caFilename,
+func testPromRemoteWriteWithTLSAux(t *testing.T, clientKeyFilename, clientCertFilename, caFilename,
 	clientKeySecretName, clientCertResourceName, caResourceName string,
-	clientCertResourceType, caResourceType int, expectedInLogs string, insecureSkipVerify, shouldSuccess bool) {
+	clientCertResourceType, caResourceType int,
+	expectedInLogs string,
+	insecureSkipVerify, shouldSuccess bool) {
 
 	ctx := framework.NewTestCtx(t)
 	defer ctx.Cleanup(t)
@@ -381,18 +387,7 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, cl
 		})).String(),
 	}
 
-	prometheusOpts := metav1.ListOptions{
-		LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
-			"app": "prometheus",
-		})).String(),
-	}
-
 	appPodList, err := framework.KubeClient.CoreV1().Pods(ns).List(context.TODO(), appOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	prometheusPodList, err := framework.KubeClient.CoreV1().Pods(ns).List(context.TODO(), prometheusOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,22 +397,16 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, certsDir, clientKeyFilename, cl
 		t.Fatal(err)
 	}
 
-	prometheusLogs, err := testFramework.GetLogs(framework.KubeClient, ns, prometheusPodList.Items[0].ObjectMeta.Name, "prometheus")
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	if shouldSuccess {
-		if !strings.Contains(prometheusLogs, expectedInLogs) {
-			t.Fatalf("test with (%s, %s, %s) faild\nprometheus logs should containe '%s' but it doesn't",
-				clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
+		for _, v := range possibleErrors {
+			if strings.Contains(appLogs, v) {
+				t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs shouldn't containe '%s' but it does",
+					clientKeyFilename, clientCertFilename, caFilename, v)
+			}
 		}
-		if strings.Contains(appLogs, "remote error: tls: bad certificate") {
-			t.Fatal(appLogs)
-		}
-	} else if !shouldSuccess && !strings.Contains(appLogs, expectedInLogs) {
+	} else if !strings.Contains(appLogs, possibleErrors[expectedInLogs]) {
 		t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs should containe '%s' but it doesn't",
-			clientKeyFilename, clientCertFilename, caFilename, expectedInLogs)
+			clientKeyFilename, clientCertFilename, caFilename, possibleErrors[expectedInLogs])
 	}
 }
 
