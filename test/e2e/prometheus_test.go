@@ -48,36 +48,38 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	SECRET    = 3
-	CONFIGMAP = 2
+var (
+	certsDir       = "../../test/e2e/remote_write_certs/"
+	possibleErrors = map[string]string{
+		"bad_server_cert": "tls: bad certificate",
+		"bad_client_cert": "tls: failed to verify client's certificate: x509: certificate signed by unknown authority",
+		"no_client_cert":  "tls: client didn't provide a certificate",
+	}
 )
 
-func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCertFilename,
-	caFilename, clientKeySecretName, clientCertResourceName, caResourceName string,
-	clientCertResourceType, caResourceType int) {
+func createK8sResources(t *testing.T, ns, certsDir string, cKey testFramework.Key, cCert, ca testFramework.Cert) {
 
 	var clientKey, clientCert, serverKey, serverCert, caCert []byte
 	var err error
 
-	if clientKeyFilename != "" {
-		clientKey, err = ioutil.ReadFile(certsDir + clientKeyFilename)
+	if cKey.Filename != "" {
+		clientKey, err = ioutil.ReadFile(certsDir + cKey.Filename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", clientKeyFilename, err)
+			t.Fatalf("failed to load %s: %v", cKey.Filename, err)
 		}
 	}
 
-	if clientCertFilename != "" {
-		clientCert, err = ioutil.ReadFile(certsDir + clientCertFilename)
+	if cCert.Filename != "" {
+		clientCert, err = ioutil.ReadFile(certsDir + cCert.Filename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", clientCertFilename, err)
+			t.Fatalf("failed to load %s: %v", cCert.Filename, err)
 		}
 	}
 
-	if caFilename != "" {
-		caCert, err = ioutil.ReadFile(certsDir + caFilename)
+	if ca.Filename != "" {
+		caCert, err = ioutil.ReadFile(certsDir + ca.Filename)
 		if err != nil {
-			t.Fatalf("failed to load %s: %v", caFilename, err)
+			t.Fatalf("failed to load %s: %v", ca.Filename, err)
 		}
 	}
 
@@ -114,21 +116,21 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 		[]string{"key.pem", "cert.pem"}, [][]byte{serverKey, serverCert})
 	secrets = append(secrets, s)
 
-	if clientKeyFilename != "" && clientCertFilename != "" {
-		s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, clientKeySecretName,
+	if cKey.Filename != "" && cCert.Filename != "" {
+		s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, cKey.SecretName,
 			[]string{"key.pem"}, [][]byte{clientKey})
 		secrets = append(secrets, s)
 
-		if clientCertResourceType == SECRET {
-			if clientCertResourceName == clientKeySecretName {
+		if cCert.ResourceType == testFramework.SECRET {
+			if cCert.ResourceName == cKey.SecretName {
 				s.Data["cert.pem"] = clientCert
 			} else {
-				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, clientCertResourceName,
+				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, cCert.ResourceName,
 					[]string{"cert.pem"}, [][]byte{clientCert})
 				secrets = append(secrets, s)
 			}
-		} else if clientCertResourceType == CONFIGMAP {
-			cm = testFramework.MakeConfigMapWithCert(framework.KubeClient, ns, clientCertResourceName,
+		} else if cCert.ResourceType == testFramework.CONFIGMAP {
+			cm = testFramework.MakeConfigMapWithCert(framework.KubeClient, ns, cCert.ResourceName,
 				"", "cert.pem", "", nil, clientCert, nil)
 			configMaps = append(configMaps, cm)
 		} else {
@@ -136,22 +138,22 @@ func createK8sResources(t *testing.T, ns, certsDir, clientKeyFilename, clientCer
 		}
 	}
 
-	if caFilename != "" {
-		if caResourceType == SECRET {
-			if caResourceName == clientKeySecretName {
+	if ca.Filename != "" {
+		if ca.ResourceType == testFramework.SECRET {
+			if ca.ResourceName == cKey.SecretName {
 				secrets[2].Data["ca.pem"] = caCert
-			} else if caResourceName == clientCertResourceName {
+			} else if ca.ResourceName == cCert.ResourceName {
 				s.Data["ca.pem"] = caCert
 			} else {
-				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, caResourceName,
+				s = testFramework.MakeSecretWithCert(framework.KubeClient, ns, ca.ResourceName,
 					[]string{"ca.pem"}, [][]byte{caCert})
 				secrets = append(secrets, s)
 			}
-		} else if caResourceType == CONFIGMAP {
-			if caResourceName == clientCertResourceName {
+		} else if ca.ResourceType == testFramework.CONFIGMAP {
+			if ca.ResourceName == cCert.ResourceName {
 				cm.Data["ca.pem"] = string(caCert)
 			} else {
-				cm = testFramework.MakeConfigMapWithCert(framework.KubeClient, ns, caResourceName,
+				cm = testFramework.MakeConfigMapWithCert(framework.KubeClient, ns, ca.ResourceName,
 					"", "", "ca.pem", nil, nil, caCert)
 				configMaps = append(configMaps, cm)
 			}
@@ -243,8 +245,8 @@ func createK8sSampleApp(t *testing.T, name, ns string) (string, int32) {
 	return svc.Spec.ClusterIP, svc.Spec.Ports[1].Port
 }
 
-func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceName, caResourceName string,
-	certResourceType, caResourceType int, svcIp string, svcTLSPort int32, insecureSkipVerify bool) {
+func createK8sAppMonitoring(t *testing.T, name, ns string, prwtc testFramework.PromRemoteWriteTestConfig,
+	svcIp string, svcTLSPort int32) {
 
 	sm := framework.MakeBasicServiceMonitor(name)
 	sm.Spec.Endpoints = []monitoringv1.Endpoint{
@@ -279,8 +281,7 @@ func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceN
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
 	prometheusCRD.Spec.Secrets = append(prometheusCRD.Spec.Secrets, "scraping-tls")
 	url := "https://" + svcIp + ":" + fmt.Sprint(svcTLSPort)
-	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, url, keySecretName,
-		certResourceName, caResourceName, certResourceType, caResourceType, insecureSkipVerify)
+	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, url, prwtc)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
 		t.Fatal(err)
 	}
@@ -297,117 +298,474 @@ func createK8sAppMonitoring(t *testing.T, name, ns, keySecretName, certResourceN
 	}
 }
 
-var (
-	certsDir       = "../../test/e2e/remote_write_certs/"
-	possibleErrors = map[string]string{
-		"bad_server_cert": "tls: bad certificate",
-		"bad_client_cert": "tls: failed to verify client's certificate: x509: certificate signed by unknown authority",
-		"no_client_cert":  "tls: client didn't provide a certificate",
-	}
-)
-
 func testPromRemoteWriteWithTLS(t *testing.T) {
 
-	// working configurations
+	// can't extend the names since ns cannot be created with more than 63 characters
+	tests := []testFramework.PromRemoteWriteTestConfig{
 
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, SECRET, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, SECRET, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", SECRET, SECRET, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", SECRET, SECRET, "", false, true)
-
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert-ca", "client-tls-cert-ca", CONFIGMAP, CONFIGMAP, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, CONFIGMAP, "", false, true)
-
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-cert", "client-tls-key-cert", "client-tls-ca", SECRET, CONFIGMAP, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", SECRET, CONFIGMAP, "", false, true)
-
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key-ca", "client-tls-cert", "client-tls-key-ca", CONFIGMAP, SECRET, "", false, true)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "ca.crt", "client-tls-key", "client-tls-cert", "client-tls-ca", CONFIGMAP, SECRET, "", false, true)
-
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, "", true, true)
-
-	// non working configurations - we will check it only for one configuration for simplicity - only one Secret
-
-	expectedInLogs := "bad_server_cert"
-
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, "client.key", "client.crt", "", "client-tls-key-cert", "client-tls-key-cert", "", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, "bad_client.key", "bad_client.crt", "bad_ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, "bad_client.key", "bad_client.crt", "", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, "", "", "bad_ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
-	testPromRemoteWriteWithTLSAux(t, "", "", "", "", "", "", SECRET, SECRET, expectedInLogs, false, false)
-
-	expectedInLogs = "bad_client_cert"
-
-	testPromRemoteWriteWithTLSAux(t, "bad_client.key", "bad_client.crt", "ca.crt", "client-tls-key-cert-ca", "client-tls-key-cert-ca", "client-tls-key-cert-ca", SECRET, SECRET, expectedInLogs, false, false)
-
-	expectedInLogs = "no_client_cert"
-
-	testPromRemoteWriteWithTLSAux(t, "", "", "ca.crt", "", "", "client-tls-ca", SECRET, SECRET, expectedInLogs, false, false)
-
-}
-
-func testPromRemoteWriteWithTLSAux(t *testing.T, clientKeyFilename, clientCertFilename, caFilename,
-	clientKeySecretName, clientCertResourceName, caResourceName string,
-	clientCertResourceType, caResourceType int,
-	expectedInLogs string,
-	insecureSkipVerify, shouldSuccess bool) {
-
-	ctx := framework.NewTestCtx(t)
-	defer ctx.Cleanup(t)
-
-	ns := ctx.CreateNamespace(t, framework.KubeClient)
-	ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
-	name := "test"
-
-	// apply authorized certificate and key to k8s as a Secret
-
-	createK8sResources(t, ns, certsDir, clientKeyFilename, clientCertFilename,
-		caFilename, clientKeySecretName, clientCertResourceName, caResourceName,
-		clientCertResourceType, caResourceType)
-
-	// Setup a sample-app which supports mTLS therefore will play 2 roles:
-	// 	1. app scraped by prometheus
-	// 	2. TLS receiver for prometheus remoteWrite
-
-	svcIp, svcTLSPort := createK8sSampleApp(t, name, ns)
-
-	// Setup monitoring.
-
-	createK8sAppMonitoring(t, name, ns, clientKeySecretName, clientCertResourceName,
-		caResourceName, clientCertResourceType, caResourceType, svcIp, svcTLSPort, insecureSkipVerify)
-
-	//TODO: make it wait by poll, there are some examples in other tests
-	// use wait.Poll() in k8s.io/apimachinery@v0.18.3/pkg/util/wait/wait.go
-	time.Sleep(45 * time.Second)
-
-	appOpts := metav1.ListOptions{
-		LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
-			"group": name,
-		})).String(),
+		// working configurations
+		{
+			Name: "variant-1",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-cert-ca",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-2",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-3",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-cert",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-key-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-4",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-5",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-ca",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-key-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-6",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert-ca",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-cert-ca",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-7",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-8",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-cert",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-key-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-9",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-10",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-ca",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-key-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-11",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-cert",
+				ResourceType: testFramework.CONFIGMAP,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      true,
+		},
+		{
+			Name: "variant-12",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-cert",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-key-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "",
+			InsecureSkipVerify: true,
+			ShouldSuccess:      true,
+		},
+		// non working configurations
+		// we will check it only for one configuration for simplicity - only one Secret
+		{
+			Name: "variant-13",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-cert-ca",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "bad_ca.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_server_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-14",
+			ClientKey: testFramework.Key{
+				Filename:   "client.key",
+				SecretName: "client-tls-key-cert",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "client.crt",
+				ResourceName: "client-tls-key-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_server_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-15",
+			ClientKey: testFramework.Key{
+				Filename:   "bad_client.key",
+				SecretName: "client-tls-key-cert-ca",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "bad_client.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "bad_ca.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_server_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-16",
+			ClientKey: testFramework.Key{
+				Filename:   "bad_client.key",
+				SecretName: "client-tls-key-cert",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "bad_client.crt",
+				ResourceName: "client-tls-key-cert",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_server_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-17",
+			ClientKey: testFramework.Key{
+				Filename:   "",
+				SecretName: "",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "bad_ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_server_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-18",
+			ClientKey: testFramework.Key{
+				Filename:   "",
+				SecretName: "",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_server_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-19",
+			ClientKey: testFramework.Key{
+				Filename:   "bad_client.key",
+				SecretName: "client-tls-key-cert-ca",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "bad_client.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-key-cert-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "bad_client_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
+		{
+			Name: "variant-20",
+			ClientKey: testFramework.Key{
+				Filename:   "",
+				SecretName: "",
+			},
+			ClientCert: testFramework.Cert{
+				Filename:     "",
+				ResourceName: "",
+				ResourceType: testFramework.SECRET,
+			},
+			CA: testFramework.Cert{
+				Filename:     "ca.crt",
+				ResourceName: "client-tls-ca",
+				ResourceType: testFramework.SECRET,
+			},
+			ExpectedInLogs:     "no_client_cert",
+			InsecureSkipVerify: false,
+			ShouldSuccess:      false,
+		},
 	}
 
-	appPodList, err := framework.KubeClient.CoreV1().Pods(ns).List(context.TODO(), appOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, test := range tests {
 
-	appLogs, err := testFramework.GetLogs(framework.KubeClient, ns, appPodList.Items[0].ObjectMeta.Name, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+		t.Run(test.Name, func(t *testing.T) {
+			t.Parallel()
 
-	if shouldSuccess {
-		for _, v := range possibleErrors {
-			if strings.Contains(appLogs, v) {
-				t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs shouldn't containe '%s' but it does",
-					clientKeyFilename, clientCertFilename, caFilename, v)
+			ctx := framework.NewTestCtx(t)
+			defer ctx.Cleanup(t)
+
+			ns := ctx.CreateNamespace(t, framework.KubeClient)
+			ctx.SetupPrometheusRBAC(t, ns, framework.KubeClient)
+			name := "test"
+
+			// apply authorized certificate and key to k8s as a Secret
+
+			createK8sResources(t, ns, certsDir, test.ClientKey, test.ClientCert, test.CA)
+
+			// Setup a sample-app which supports mTLS therefore will play 2 roles:
+			// 	1. app scraped by prometheus
+			// 	2. TLS receiver for prometheus remoteWrite
+
+			svcIp, svcTLSPort := createK8sSampleApp(t, name, ns)
+
+			// Setup monitoring.
+
+			createK8sAppMonitoring(t, name, ns, test, svcIp, svcTLSPort)
+
+			//TODO: make it wait by poll, there are some examples in other tests
+			// use wait.Poll() in k8s.io/apimachinery@v0.18.3/pkg/util/wait/wait.go
+			time.Sleep(45 * time.Second)
+
+			appOpts := metav1.ListOptions{
+				LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
+					"group": name,
+				})).String(),
 			}
-		}
-	} else if !strings.Contains(appLogs, possibleErrors[expectedInLogs]) {
-		t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs should containe '%s' but it doesn't",
-			clientKeyFilename, clientCertFilename, caFilename, possibleErrors[expectedInLogs])
+
+			appPodList, err := framework.KubeClient.CoreV1().Pods(ns).List(context.TODO(), appOpts)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			appLogs, err := testFramework.GetLogs(framework.KubeClient, ns, appPodList.Items[0].ObjectMeta.Name, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if test.ShouldSuccess {
+				for _, v := range possibleErrors {
+					if strings.Contains(appLogs, v) {
+						t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs shouldn't containe '%s' but it does",
+							test.ClientKey.Filename, test.ClientCert.Filename, test.CA.Filename, v)
+					}
+				}
+			} else if !strings.Contains(appLogs, possibleErrors[test.ExpectedInLogs]) {
+				t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs should containe '%s' but it doesn't",
+					test.ClientKey.Filename, test.ClientCert.Filename, test.CA.Filename, possibleErrors[test.ExpectedInLogs])
+			}
+		})
 	}
 }
 
