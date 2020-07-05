@@ -379,6 +379,7 @@ func testPromRemoteWriteWithTLSAux(t *testing.T, clientKeyFilename, clientCertFi
 		caResourceName, clientCertResourceType, caResourceType, svcIp, svcTLSPort, insecureSkipVerify)
 
 	//TODO: make it wait by poll, there are some examples in other tests
+	// use wait.Poll() in k8s.io/apimachinery@v0.18.3/pkg/util/wait/wait.go
 	time.Sleep(45 * time.Second)
 
 	appOpts := metav1.ListOptions{
