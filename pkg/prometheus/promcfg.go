@@ -73,6 +73,7 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	return res
 }
 
+//FIXME: remove namespace variable and update all the callers and their TODO comment
 func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
 	if tls != nil {
 		tlsConfig := yaml.MapSlice{
@@ -250,6 +251,7 @@ func (cg *configGenerator) generateConfig(
 			scrapeConfigs = append(scrapeConfigs,
 				cg.generateServiceMonitorConfig(
 					version,
+					&p.Spec,
 					sMons[identifier],
 					ep, i,
 					apiserverConfig,
@@ -812,8 +814,51 @@ func (cg *configGenerator) generateProbeConfig(
 	return cfg
 }
 
+func mountTLSConfigFromSecretOrConfigmap(tls *v1.TLSConfig, promSpec *v1.PrometheusSpec) {
+
+	// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well.
+	// Cert can be a Secret (either the same as KeySecret or a different one), or a ConfigMap.
+	var keySecretName, certResourceName, caResourceName, certPrefixedResourceName,
+		caPrefixedResourceName string
+
+	if tls != nil {
+		if tls.KeySecret != nil {
+			keySecretName = tls.KeySecret.LocalObjectReference.Name
+			promSpec.Secrets = append(promSpec.Secrets, keySecretName)
+			if tls.Cert.Secret != nil {
+				certResourceName = tls.Cert.Secret.LocalObjectReference.Name
+				certPrefixedResourceName = "secret-" + certResourceName
+				if keySecretName != certResourceName {
+					promSpec.Secrets = append(promSpec.Secrets, certResourceName)
+				}
+			} else {
+				certResourceName = tls.Cert.ConfigMap.LocalObjectReference.Name
+				certPrefixedResourceName = "configmap-" + certResourceName
+				promSpec.ConfigMaps = append(promSpec.ConfigMaps, certResourceName)
+			}
+		}
+
+		if (tls.CA != v1.SecretOrConfigMap{}) {
+			if tls.CA.Secret != nil {
+				caResourceName = tls.CA.Secret.LocalObjectReference.Name
+				caPrefixedResourceName = "secret-" + caResourceName
+				if caResourceName != keySecretName && caPrefixedResourceName != certPrefixedResourceName {
+					promSpec.Secrets = append(promSpec.Secrets, caResourceName)
+				}
+			} else {
+				caResourceName = tls.CA.ConfigMap.LocalObjectReference.Name
+				caPrefixedResourceName = "configmap-" + caResourceName
+				if caPrefixedResourceName != certPrefixedResourceName {
+					promSpec.ConfigMaps = append(promSpec.ConfigMaps, caResourceName)
+				}
+			}
+		}
+	}
+}
+
 func (cg *configGenerator) generateServiceMonitorConfig(
 	version semver.Version,
+	promSpec *v1.PrometheusSpec,
 	m *v1.ServiceMonitor,
 	ep v1.Endpoint,
 	i int,
@@ -870,6 +915,7 @@ func (cg *configGenerator) generateServiceMonitorConfig(
 		cfg = append(cfg, yaml.MapItem{Key: "scheme", Value: ep.Scheme})
 	}
 
+	mountTLSConfigFromSecretOrConfigmap(ep.TLSConfig, promSpec)
 	cfg = addTLStoYaml(cfg, m.Namespace, ep.TLSConfig)
 
 	if ep.BearerTokenFile != "" {
@@ -1456,46 +1502,7 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 			cfg = append(cfg, yaml.MapItem{Key: "bearer_token_file", Value: spec.BearerTokenFile})
 		}
 
-		if spec.TLSConfig != nil {
-
-			// it is guaranteed that if KeySecret is set then Cert (SecretOrConfigMap) is set as well.
-			// Cert can be a Secret (either the same as KeySecret or a different one), or a ConfigMap.
-			var keySecretName, certResourceName, caResourceName, certPrefixedResourceName,
-				caPrefixedResourceName string
-
-			if spec.TLSConfig.KeySecret != nil {
-				keySecretName = spec.TLSConfig.KeySecret.LocalObjectReference.Name
-				promSpec.Secrets = append(promSpec.Secrets, keySecretName)
-				if spec.TLSConfig.Cert.Secret != nil {
-					certResourceName = spec.TLSConfig.Cert.Secret.LocalObjectReference.Name
-					certPrefixedResourceName = "secret-" + certResourceName
-					if keySecretName != certResourceName {
-						promSpec.Secrets = append(promSpec.Secrets, certResourceName)
-					}
-				} else {
-					certResourceName = spec.TLSConfig.Cert.ConfigMap.LocalObjectReference.Name
-					certPrefixedResourceName = "configmap-" + certResourceName
-					promSpec.ConfigMaps = append(promSpec.ConfigMaps, certResourceName)
-				}
-			}
-
-			if (spec.TLSConfig.CA != v1.SecretOrConfigMap{}) {
-				if spec.TLSConfig.CA.Secret != nil {
-					caResourceName = spec.TLSConfig.CA.Secret.LocalObjectReference.Name
-					caPrefixedResourceName = "secret-" + caResourceName
-					if caResourceName != keySecretName && caPrefixedResourceName != certPrefixedResourceName {
-						promSpec.Secrets = append(promSpec.Secrets, caResourceName)
-					}
-				} else {
-					caResourceName = spec.TLSConfig.CA.ConfigMap.LocalObjectReference.Name
-					caPrefixedResourceName = "configmap-" + caResourceName
-					if caPrefixedResourceName != certPrefixedResourceName {
-						promSpec.ConfigMaps = append(promSpec.ConfigMaps, caResourceName)
-					}
-				}
-			}
-		}
-
+		mountTLSConfigFromSecretOrConfigmap(spec.TLSConfig, promSpec)
 		cfg = addTLStoYaml(cfg, "", spec.TLSConfig)
 
 		if spec.ProxyURL != "" {

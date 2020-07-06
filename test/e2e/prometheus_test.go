@@ -279,7 +279,6 @@ func createK8sAppMonitoring(t *testing.T, name, ns string, prwtc testFramework.P
 	}
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
-	prometheusCRD.Spec.Secrets = append(prometheusCRD.Spec.Secrets, "scraping-tls")
 	url := "https://" + svcIp + ":" + fmt.Sprint(svcTLSPort)
 	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, url, prwtc)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
@@ -2819,6 +2818,7 @@ func mountTLSFiles(p *monitoringv1.Prometheus, secretName string) {
 	}
 }
 
+//FIXME: add a test using configmaps
 // testPromTLSConfigViaSecret tests the service monitor endpoint option to load
 // certificate assets via Kubernetes secrets into the Prometheus container.
 func testPromTLSConfigViaSecret(t *testing.T) {
@@ -2929,14 +2929,6 @@ func testPromTLSConfigViaSecret(t *testing.T) {
 			Scheme:   "https",
 			TLSConfig: &monitoringv1.TLSConfig{
 				InsecureSkipVerify: true,
-				CA: monitoringv1.SecretOrConfigMap{
-					Secret: &v1.SecretKeySelector{
-						LocalObjectReference: v1.LocalObjectReference{
-							Name: tlsCertsSecret.Name,
-						},
-						Key: "cert.pem",
-					},
-				},
 				Cert: monitoringv1.SecretOrConfigMap{
 					Secret: &v1.SecretKeySelector{
 						LocalObjectReference: v1.LocalObjectReference{
