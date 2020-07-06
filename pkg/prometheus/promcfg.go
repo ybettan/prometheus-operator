@@ -73,8 +73,7 @@ func stringMapToMapSlice(m map[string]string) yaml.MapSlice {
 	return res
 }
 
-//FIXME: remove namespace variable and update all the callers and their TODO comment
-func addTLStoYaml(cfg yaml.MapSlice, namespace string, tls *v1.TLSConfig) yaml.MapSlice {
+func addTLStoYaml(cfg yaml.MapSlice, tls *v1.TLSConfig) yaml.MapSlice {
 	if tls != nil {
 		tlsConfig := yaml.MapSlice{
 			{Key: "insecure_skip_verify", Value: tls.InsecureSkipVerify},
@@ -916,7 +915,7 @@ func (cg *configGenerator) generateServiceMonitorConfig(
 	}
 
 	mountTLSConfigFromSecretOrConfigmap(ep.TLSConfig, promSpec)
-	cfg = addTLStoYaml(cfg, m.Namespace, ep.TLSConfig)
+	cfg = addTLStoYaml(cfg, ep.TLSConfig)
 
 	if ep.BearerTokenFile != "" {
 		cfg = append(cfg, yaml.MapItem{Key: "bearer_token_file", Value: ep.BearerTokenFile})
@@ -1272,8 +1271,9 @@ func (cg *configGenerator) generateK8SSDConfig(namespaces []string, apiserverCon
 		}
 
 		// TODO: If we want to support secret refs for k8s service discovery tls
-		// config as well, make sure to path the right namespace here.
-		k8sSDConfig = addTLStoYaml(k8sSDConfig, "", apiserverConfig.TLSConfig)
+		// config as well, make sure to mount the secret/configmap using
+		// mountTLSConfigFromSecretOrConfigmap function
+		k8sSDConfig = addTLStoYaml(k8sSDConfig, apiserverConfig.TLSConfig)
 	}
 
 	return yaml.MapItem{
@@ -1299,8 +1299,9 @@ func (cg *configGenerator) generateAlertmanagerConfig(version semver.Version, am
 	}
 
 	// TODO: If we want to support secret refs for alertmanager config tls
-	// config as well, make sure to path the right namespace here.
-	cfg = addTLStoYaml(cfg, "", am.TLSConfig)
+	// config as well, make sure to mount the secret/configmap using
+	// mountTLSConfigFromSecretOrConfigmap function
+	cfg = addTLStoYaml(cfg, am.TLSConfig)
 
 	switch version.Major {
 	case 1:
@@ -1408,8 +1409,9 @@ func (cg *configGenerator) generateRemoteReadConfig(version semver.Version, spec
 		}
 
 		// TODO: If we want to support secret refs for remote read tls
-		// config as well, make sure to path the right namespace here.
-		cfg = addTLStoYaml(cfg, "", spec.TLSConfig)
+		// config as well, make sure to mount the secret/configmap using
+		// mountTLSConfigFromSecretOrConfigmap function
+		cfg = addTLStoYaml(cfg, spec.TLSConfig)
 
 		if spec.ProxyURL != "" {
 			cfg = append(cfg, yaml.MapItem{Key: "proxy_url", Value: spec.ProxyURL})
@@ -1503,7 +1505,7 @@ func (cg *configGenerator) generateRemoteWriteConfig(version semver.Version, pro
 		}
 
 		mountTLSConfigFromSecretOrConfigmap(spec.TLSConfig, promSpec)
-		cfg = addTLStoYaml(cfg, "", spec.TLSConfig)
+		cfg = addTLStoYaml(cfg, spec.TLSConfig)
 
 		if spec.ProxyURL != "" {
 			cfg = append(cfg, yaml.MapItem{Key: "proxy_url", Value: spec.ProxyURL})
