@@ -2751,6 +2751,12 @@ func testPromArbitraryFSAcc(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			s := framework.MakeBasicServiceMonitor(name)
+			s.Spec.Endpoints[0] = test.endpoint
+			if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), s, metav1.CreateOptions{}); err != nil {
+				t.Fatal("creating ServiceMonitor failed: ", err)
+			}
+
 			prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
 			prometheusCRD.Namespace = ns
 			prometheusCRD.Spec.ArbitraryFSAccessThroughSMs = test.arbitraryFSAccessThroughSMsConfig
@@ -2766,12 +2772,6 @@ func testPromArbitraryFSAcc(t *testing.T) {
 			svc := framework.MakePrometheusService(prometheusCRD.Name, name, v1.ServiceTypeClusterIP)
 			if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, svc); err != nil {
 				t.Fatal(err)
-			}
-
-			s := framework.MakeBasicServiceMonitor(name)
-			s.Spec.Endpoints[0] = test.endpoint
-			if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), s, metav1.CreateOptions{}); err != nil {
-				t.Fatal("creating ServiceMonitor failed: ", err)
 			}
 
 			if test.expectTargets {
